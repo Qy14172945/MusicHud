@@ -26,6 +26,7 @@ import indi.etern.musichud.client.ui.utils.ButtonInsetBackgroundFactory;
 import lombok.Getter;
 import net.minecraft.client.resources.language.I18n;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static icyllis.modernui.view.ViewGroup.LayoutParams.MATCH_PARENT;
@@ -255,31 +256,40 @@ public class AccountView extends LinearLayout {
             content.addView(artistCards, artistParams);
 
             MusicService musicService = MusicService.getInstance();
+            // Each section is independent and optional: QQ's follow-singers endpoint is broken
+            // upstream and subscriptions can be empty, so a failing section must neither hide the
+            // others nor leave the progress bar spinning forever.
             CompletableFuture.allOf(
-                    musicService.loadUserPlaylists().thenAcceptAsync(playlists -> {
-                        MuiModApi.postToUiThread(() -> {
-                            for (Playlist playlist : playlists) {
-                                playlistCards.addView(new MusicCollectionCard(context, playlist));
-                            }
-                        });
-                    }, MusicHud.EXECUTOR),
-                    musicService.loadUserAlbums().thenAcceptAsync(albums -> {
-                        MuiModApi.postToUiThread(() -> {
-                            for (Album playlist : albums) {
-                                albumCards.addView(new MusicCollectionCard(context, playlist));
-                            }
-                        });
-                    }),
-                    musicService.loadUserArtists().thenAcceptAsync(artists -> {
-                        MuiModApi.postToUiThread(() -> {
-                            for (Artist artist : artists) {
-                                ArtistCard artistCard = new ArtistCard(context);
-                                artistCard.bindData(artist);
-                                artistCards.addView(artistCard);
-                            }
-                        });
-                    })
-            ).thenAccept((v) -> {
+                    musicService.loadUserPlaylists()
+                            .exceptionally(error -> List.of())
+                            .thenAcceptAsync(playlists -> {
+                                MuiModApi.postToUiThread(() -> {
+                                    for (Playlist playlist : playlists) {
+                                        playlistCards.addView(new MusicCollectionCard(context, playlist));
+                                    }
+                                });
+                            }, MusicHud.EXECUTOR),
+                    musicService.loadUserAlbums()
+                            .exceptionally(error -> List.of())
+                            .thenAcceptAsync(albums -> {
+                                MuiModApi.postToUiThread(() -> {
+                                    for (Album playlist : albums) {
+                                        albumCards.addView(new MusicCollectionCard(context, playlist));
+                                    }
+                                });
+                            }),
+                    musicService.loadUserArtists()
+                            .exceptionally(error -> List.of())
+                            .thenAcceptAsync(artists -> {
+                                MuiModApi.postToUiThread(() -> {
+                                    for (Artist artist : artists) {
+                                        ArtistCard artistCard = new ArtistCard(context);
+                                        artistCard.bindData(artist);
+                                        artistCards.addView(artistCard);
+                                    }
+                                });
+                            })
+            ).whenComplete((v, error) -> {
                 MuiModApi.postToUiThread(() -> {
                     progressBar.setVisibility(View.GONE);
                 });

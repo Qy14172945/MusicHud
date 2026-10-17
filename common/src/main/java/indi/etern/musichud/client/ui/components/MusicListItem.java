@@ -34,6 +34,7 @@ public class MusicListItem extends LinearLayout {
     private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("mm:ss");
     private UrlImageView albumImage;
     private TextView musicName;
+    private PlatformBadge platformBadge;
     private FlexWrapLayout musicArtistAndAlbum;
     private TextView durationText;
     private TextView pusherText;
@@ -67,11 +68,23 @@ public class MusicListItem extends LinearLayout {
         textsParams.setMargins(dp(12), 0, 0, 0);
         addView(musicTexts, textsParams);
 
+        // The song title shares a row with the platform chip: the two providers can be searched and
+        // played at the same time, so every row must say which API it will be fetched from.
+        LinearLayout nameRow = new LinearLayout(context);
+        nameRow.setOrientation(HORIZONTAL);
+        nameRow.setGravity(Gravity.CENTER_VERTICAL);
+        musicTexts.addView(nameRow, new LayoutParams(MATCH_PARENT, WRAP_CONTENT));
+
         musicName = new TextView(context);
         musicName.setSingleLine(true);
         musicName.setTextSize(Theme.TEXT_SIZE_LARGE);
         musicName.setTextColor(Theme.NORMAL_TEXT_COLOR);
-        musicTexts.addView(musicName);
+        nameRow.addView(musicName, new LayoutParams(0, WRAP_CONTENT, 1));
+
+        platformBadge = new PlatformBadge(context);
+        LayoutParams badgeParams = new LayoutParams(WRAP_CONTENT, WRAP_CONTENT);
+        badgeParams.setMargins(dp(6), 0, 0, 0);
+        nameRow.addView(platformBadge, badgeParams);
 
         musicArtistAndAlbum = new FlexWrapLayout(context);
         musicTexts.addView(musicArtistAndAlbum);
@@ -122,6 +135,7 @@ public class MusicListItem extends LinearLayout {
         albumImage.loadUrl(musicDetail.getAlbum().getThumbnailPicUrl(dp(imageSize)));
 
         musicName.setText(musicDetail.getName());
+        platformBadge.setProvider(musicDetail.getProvider());
 
         musicArtistAndAlbum.removeAllViews();
         int index = 0;

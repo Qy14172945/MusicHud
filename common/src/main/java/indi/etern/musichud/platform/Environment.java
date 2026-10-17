@@ -37,24 +37,15 @@ public class Environment {
                 () -> load("indi.etern.musichud.platform.mod.fabric.event.FabricServerEventService", IServerEventService.class),
                 () -> load("indi.etern.musichud.platform.mod.fabric.event.FabricClientEventService", IClientEventService.class),
                 () -> load("indi.etern.musichud.platform.mod.fabric.registry.FabricKeyRegistryService", IKeyRegistryService.class)),
-        NEOFORGE(
+        FORGE(
                 () -> load("indi.etern.musichud.platform.mod.forgeConfig.config.ServerConfigDefinition", ServerConfig.class),
                 () -> load("indi.etern.musichud.platform.mod.forgeConfig.config.ClientConfigDefinition", ClientConfig.class),
-                () -> load("indi.etern.musichud.platform.mod.neoforge.network.NeoForgeNetworkManager", INetworkRegister.class),
-                () -> load("indi.etern.musichud.platform.mod.neoforge.network.NeoForgeNetworkManager", IServerNetworkService.class),
-                () -> load("indi.etern.musichud.platform.mod.neoforge.network.NeoForgeClientNetworkService", IClientNetworkService.class),
-                () -> load("indi.etern.musichud.platform.mod.neoforge.event.NeoForgeServerEventService", IServerEventService.class),
-                () -> load("indi.etern.musichud.platform.mod.neoforge.event.NeoForgeClientEventService", IClientEventService.class),
-                () -> load("indi.etern.musichud.platform.mod.neoforge.registry.NeoForgeKeyRegistryService", IKeyRegistryService.class)),
-        PAPER(
-                () -> load("indi.etern.musichud.platform.plugin.paper.config.ServerConfigDefinition", ServerConfig.class),
-                null,
-                () -> load("indi.etern.musichud.platform.plugin.paper.network.PaperNetworkManager", INetworkRegister.class),
-                () -> load("indi.etern.musichud.platform.plugin.paper.network.PaperNetworkManager", IServerNetworkService.class),
-                null,
-                () -> load("indi.etern.musichud.platform.plugin.paper.event.PaperEventService", IServerEventService.class),
-                null,
-                null);
+                () -> load("indi.etern.musichud.platform.mod.forge.network.ForgeNetworkManager", INetworkRegister.class),
+                () -> load("indi.etern.musichud.platform.mod.forge.network.ForgeNetworkManager", IServerNetworkService.class),
+                () -> load("indi.etern.musichud.platform.mod.forge.network.ForgeClientNetworkService", IClientNetworkService.class),
+                () -> load("indi.etern.musichud.platform.mod.forge.event.ForgeServerEventService", IServerEventService.class),
+                () -> load("indi.etern.musichud.platform.mod.forge.event.ForgeClientEventService", IClientEventService.class),
+                () -> load("indi.etern.musichud.platform.mod.forge.registry.ForgeKeyRegistryService", IKeyRegistryService.class));
 
         private final Supplier<ServerConfig> serverConfigSupplier;
         private final Supplier<ClientConfig> clientConfigSupplier;

@@ -10,6 +10,10 @@ import indi.etern.musichud.server.api.ApiProvider;
 import indi.etern.musichud.server.api.ILoginApiService;
 import indi.etern.musichud.utils.ServerDataPacketVThreadExecutor;
 
+/**
+ * Requests an SMS validation code. NetEase-only, like {@link PhoneCodeLoginRequest}: QQ Music has
+ * no phone login flow at all.
+ */
 public record SendPhoneValidationCodeRequest(int regionCode, long phone) implements C2SPayload {
     public static final ByteBufCodec<SendPhoneValidationCodeRequest> CODEC = ByteBufCodec.composite(
                     Codecs.INT,

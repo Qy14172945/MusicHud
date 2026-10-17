@@ -4,6 +4,8 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import indi.etern.musichud.MusicHud;
 import indi.etern.musichud.beans.api.IdlePlaySource;
+import indi.etern.musichud.beans.login.LoginCookieInfo;
+import indi.etern.musichud.beans.login.LoginType;
 import indi.etern.musichud.beans.music.*;
 import indi.etern.musichud.beans.user.Profile;
 import indi.etern.musichud.interfaces.RegisterMark;
@@ -15,12 +17,12 @@ import indi.etern.musichud.network.payloads.pushMessages.s2c.RefreshMusicQueueMe
 import indi.etern.musichud.network.payloads.pushMessages.s2c.SwitchMusicMessage;
 import indi.etern.musichud.network.payloads.pushMessages.s2c.SyncCurrentPlayingMessage;
 import indi.etern.musichud.network.payloads.pushMessages.s2c.UpdateAllIdlePlaySourcesMessage;
-import indi.etern.musichud.server.api.impl.ncm.LoginApiService;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.SneakyThrows;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -34,6 +36,11 @@ public class MusicPlayerServerService {
     private static final ServerConfig serverConfig = ServerConfig.getInstance();
     private static volatile MusicPlayerServerService instance;
     final Map<PusherInfo, Set<IdlePlaySource>> idlePlaySources = new ConcurrentHashMap<>();
+    /**
+     * Default backend, used for call sites that legitimately have no music entity to inspect.
+     * Anything that is about to fetch data <i>for</i> a specific track must go through
+     * {@link #apiFor(MusicDetail)} instead, so QQ tracks are served by the QQ backend.
+     */
     private final IMusicApiService musicApiService = IMusicApiService.getInstance(ApiProvider.NCM);
     private final CurrentVoteInfo currentVoteInfo = new CurrentVoteInfo();
     private final Logger logger = MusicHud.getLogger(MusicPlayerServerService.class);
@@ -42,7 +49,6 @@ public class MusicPlayerServerService {
             .maximumSize(20)
             .build();
     private final IServerNetworkService serverNetworkService = IServerNetworkService.getInstance();
-    private static final ILoginApiService loginApiService = ILoginApiService.getInstance(ApiProvider.NCM);
     private static final long DEBOUNCE_DELAY_MILLIS = 500;
     private final AtomicInteger debounceToken = new AtomicInteger(0);
     @Getter
@@ -70,7 +76,7 @@ public class MusicPlayerServerService {
             while (MusicPlayerServerService.this.continuable) {
                 MusicDetail switchedToPlay = null;
                 try {
-                    Map<UUID, LoginApiService.PlayerLoginInfo> loginedPlayerInfoMap = loginApiService.getPlayerInfoMap();
+                    Map<UUID, ILoginApiService.PlayerLoginInfo> loginedPlayerInfoMap = allPlayerLoginInfos();
                     if (musicQueue.isEmpty()) {
                         Optional<MusicDetail> optionalMusicDetail = getRandomMusicFromIdleSources();
                         if (optionalMusicDetail.isEmpty()) {
@@ -109,12 +115,13 @@ public class MusicPlayerServerService {
 
                     nextIdleMusicDetail = preloadMusicDetail != null ? preloadMusicDetail : MusicDetail.NONE;
 
-                    MusicResourceInfo resourceInfo = musicApiService.getResourceInfo(switchedToPlay, Quality.STANDARD, switchedToPlay.getPusherInfo().getPlayerUUID());
+                    IMusicApiService trackApi = apiFor(switchedToPlay);
+                    MusicResourceInfo resourceInfo = trackApi.getResourceInfo(switchedToPlay, Quality.STANDARD, switchedToPlay.getPusherInfo().getPlayerUUID());
                     if (resourceInfo.equals(MusicResourceInfo.NONE)) {
                         continue;
                     }
                     if (switchedToPlay.getLyricInfo() == null || switchedToPlay.getLyricInfo().equals(LyricInfo.NONE)) {
-                        switchedToPlay.setLyricInfo(musicApiService.getLyricInfo(switchedToPlay));
+                        switchedToPlay.setLyricInfo(trackApi.getLyricInfo(switchedToPlay));
                     }
                     serverNetworkService.sendToPlayerInfos(
                             loginedPlayerInfoMap.values(),
@@ -181,22 +188,17 @@ public class MusicPlayerServerService {
 
             MusicDetail randomTrack = allTracks.get(MusicHud.RANDOM.nextInt(allTracks.size()));
             if (randomTrack.getExtraInfo() == null) {
-                List<MusicDetail> detailByIds = musicApiService.getMusicDetailByIds(List.of(randomTrack.getId()), null);
-                if (detailByIds.size() == 1) {
-                    MusicDetail musicDetail = detailByIds.getFirst();
-                    if (musicDetail.getId() == randomTrack.getId()) {
-                        randomTrack.setExtraInfo(musicDetail.getExtraInfo());
-                    } else {
-                        return Optional.empty();
-                    }
-                } else {
+                MusicDetail detail = resolveDetail(randomTrack.getId(), randomTrack, null);
+                if (detail == null) {
                     return Optional.empty();
                 }
+                if (detail.getId() != randomTrack.getId()) {
+                    return Optional.empty();
+                }
+                randomTrack.setExtraInfo(detail.getExtraInfo());
             }
 
-            LoginApiService.PlayerLoginInfo loginInfo =
-                    loginApiService.getLoginInfoByPlayerUUID(pusherInfo.getPlayerUUID());
-            if (loginInfo != null) {
+            if (findLoginInfo(pusherInfo.getPlayerUUID()) != null) {
                 randomTrack.setPusherInfo(pusherInfo);
             } else {
                 randomTrack.setPusherInfo(PusherInfo.EMPTY);
@@ -206,7 +208,24 @@ public class MusicPlayerServerService {
     };
 
     public MusicPlayerServerService() {
-        updateContinuable(!loginApiService.getLoginStateChangeListeners().isEmpty());
+        updateContinuable(hasAnyLoginStateListener());
+    }
+
+    /**
+     * Whether any provider has a login-state listener attached. Providers keep separate listener
+     * sets, so a single hard-coded one would miss listeners attached to the other backend.
+     * <p>
+     * Iterates every provider rather than {@link ApiProvider#availableProviders()}: this answers a
+     * question about the listener registry, and must agree with the registration-time attachment
+     * below even when it runs before the platform config is bound.
+     */
+    private static boolean hasAnyLoginStateListener() {
+        for (ApiProvider provider : ApiProvider.values()) {
+            if (!ILoginApiService.getInstance(provider).getLoginStateChangeListeners().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static MusicPlayerServerService getInstance() {
@@ -247,7 +266,7 @@ public class MusicPlayerServerService {
         if (haveSentMusic) {
             haveSentMusic = false;
             serverNetworkService.sendToPlayerInfos(
-                    loginApiService.getPlayerInfoMap().values(),
+                    allPlayerLoginInfos().values(),
                     new SwitchMusicMessage(MusicDetail.NONE, MusicDetail.NONE, "")
             );
             currentVoteInfo.resetTo(MusicDetail.NONE);
@@ -257,7 +276,7 @@ public class MusicPlayerServerService {
     public void sendSyncPlayingStatusToPlayer(IPlayerClient player) {
         serverNetworkService.sendToPlayer(player,
                 new RefreshMusicQueueMessage(musicQueue));
-        sendUpdateAllIdlePlaySourcesMessageTo(Collections.singleton(loginApiService.getLoginInfoByPlayerUUID(player.getUUID())));
+        sendUpdateAllIdlePlaySourcesMessageTo(Collections.singleton(findLoginInfo(player.getUUID())));
         if (currentMusicDetail != MusicDetail.NONE) {
             haveSentMusic = true;
             serverNetworkService.sendToPlayer(player,
@@ -265,7 +284,7 @@ public class MusicPlayerServerService {
         }
     }
 
-    public void sendUpdateAllIdlePlaySourcesMessageTo(Collection<LoginApiService.PlayerLoginInfo> playerLoginInfos) {
+    public void sendUpdateAllIdlePlaySourcesMessageTo(Collection<ILoginApiService.PlayerLoginInfo> playerLoginInfos) {
         List<Playlist> publicPlaylists = new ArrayList<>();
         List<Playlist> privatePlaylists = new ArrayList<>();
         List<Album> albums = new ArrayList<>();
@@ -285,7 +304,7 @@ public class MusicPlayerServerService {
             }
         }
 
-        for (LoginApiService.PlayerLoginInfo playerLoginInfo : playerLoginInfos) {
+        for (ILoginApiService.PlayerLoginInfo playerLoginInfo : playerLoginInfos) {
             if (playerLoginInfo != null) {
                 Profile playerProfile = playerLoginInfo.getProfile();
                 List<Playlist> processedPrivatePlaylists = new ArrayList<>();
@@ -312,20 +331,21 @@ public class MusicPlayerServerService {
                 return;
             }
             if (debounceToken.get() == token) {
-                sendUpdateAllIdlePlaySourcesMessageTo(loginApiService.getPlayerInfoMap().values());
+                sendUpdateAllIdlePlaySourcesMessageTo(allPlayerLoginInfos().values());
             }
         });
     }
 
     public void pushMusicToQueue(long musicDetailId, PusherInfo pusherInfo) {
-        List<MusicDetail> musicDetailByIds = musicApiService.getMusicDetailByIds(List.of(musicDetailId), pusherInfo.getPlayerUUID());
-        if (musicDetailByIds.size() != 1) {
+        // The pushed id is the only information available here, so the registry hint (built while
+        // the client was browsing) is what tells a QQ track apart from a NetEase one.
+        MusicDetail musicDetail = resolveDetail(musicDetailId, MusicIdRegistry.detailOf(musicDetailId), pusherInfo.getPlayerUUID());
+        if (musicDetail == null || musicDetail.getId() != musicDetailId) {
             throw new IllegalStateException();
         }
-        MusicDetail musicDetail = musicDetailByIds.getFirst();
         musicDetail.setPusherInfo(pusherInfo);
         musicQueue.add(musicDetail);
-        serverNetworkService.sendToPlayerInfos(loginApiService.getPlayerInfoMap().values(),
+        serverNetworkService.sendToPlayerInfos(allPlayerLoginInfos().values(),
                 new RefreshMusicQueueMessage(musicQueue));
         updateContinuable(true);
     }
@@ -370,7 +390,7 @@ public class MusicPlayerServerService {
         if (musicDetail.getPusherInfo().getPlayerUUID().equals(playerUUID)) {
             AtomicInteger index1 = new AtomicInteger(0);
             musicQueue.removeIf(musicDetail1 -> index == index1.getAndIncrement() && musicDetail.equals(musicDetail1));
-            serverNetworkService.sendToPlayerInfos(loginApiService.getPlayerInfoMap().values(),
+            serverNetworkService.sendToPlayerInfos(allPlayerLoginInfos().values(),
                     new RefreshMusicQueueMessage(musicQueue));
         } else {
             throw new IllegalAccessException();
@@ -380,7 +400,7 @@ public class MusicPlayerServerService {
     private void trySimplyRemove(MusicDetail musicDetail, UUID playerUUID) {
         if (musicDetail.getPusherInfo().getPlayerUUID().equals(playerUUID)) {
             musicQueue.remove(musicDetail);
-            serverNetworkService.sendToPlayerInfos(loginApiService.getPlayerInfoMap().values(),
+            serverNetworkService.sendToPlayerInfos(allPlayerLoginInfos().values(),
                     new RefreshMusicQueueMessage(musicQueue));
         }
     }
@@ -415,7 +435,17 @@ public class MusicPlayerServerService {
 
     public MusicResourceInfo getMusicResourceInfo(long id, Quality quality, String retryFor, UUID playerUUID) {
         try {
-            List<MusicDetail> musicDetails = IMusicApiService.getInstance(ApiProvider.NCM).getMusicDetailByIds(List.of(id), null);
+            // QQ cannot resolve a numeric id on its own (/getSongInfo is broken upstream and its
+            // lyric/play endpoints reject numeric ids), so the provider that minted the id — and its
+            // own identifier for the track — both come from the server-side id registry.
+            ApiProvider provider = MusicIdRegistry.providerOf(id);
+            MusicDetail knownDetail = MusicIdRegistry.detailOf(id);
+            List<MusicDetail> musicDetails;
+            if (knownDetail != null && knownDetail.getProvider() == provider) {
+                musicDetails = List.of(knownDetail);
+            } else {
+                musicDetails = IMusicApiService.getInstance(provider).getMusicDetailByIds(List.of(id), null);
+            }
             if (musicDetails.size() == 1) {
                 MusicDetail musicDetail = musicDetails.getFirst();
                 try {
@@ -446,12 +476,111 @@ public class MusicPlayerServerService {
     }
 
     private @NotNull MusicResourceInfo getMusicResourceInfoWithoutCache(Quality quality, MusicDetail musicDetail, UUID playerUUID) {
-        MusicResourceInfo resourceInfo = musicApiService.getResourceInfo(musicDetail, quality, playerUUID);
+        MusicResourceInfo resourceInfo = apiFor(musicDetail).getResourceInfo(musicDetail, quality, playerUUID);
         if (resourceInfo != null && !resourceInfo.equals(MusicResourceInfo.NONE)) {
             return resourceInfo;
         } else {
             throw new RuntimeException("Failed to get resource info for music: " + musicDetail.getName() + " (ID: " + musicDetail.getId() + ")");
         }
+    }
+
+    /**
+     * Picks the backend that owns {@code musicDetail}.
+     * <p>
+     * The bean's own {@link ApiProvider} is authoritative when it has one (search results and
+     * album/playlist tracks carry it across the network). Playlists built locally from a bare id
+     * — e.g. an idle play source persisted from an earlier session — fall back to the server-side
+     * {@link MusicIdRegistry}, and NetEase is the final default so pre-existing behaviour is kept.
+     */
+    private IMusicApiService apiFor(@Nullable MusicDetail musicDetail) {
+        if (musicDetail == null || musicDetail == MusicDetail.NONE) {
+            return musicApiService;
+        }
+        ApiProvider provider = musicDetail.getProvider();
+        if (provider == null) {
+            provider = MusicIdRegistry.providerOf(musicDetail.getId());
+        }
+        return IMusicApiService.getInstance(provider);
+    }
+
+    /**
+     * Resolves a bare numeric id back to a playable {@link MusicDetail}, or {@code null} when no
+     * provider can answer for it.
+     * <p>
+     * The server-side registry is consulted first because QQ cannot re-fetch a track from a numeric
+     * id at all ({@code /getSongInfo} is broken upstream and its lyric and play endpoints reject
+     * numeric ids) — the remembered bean is the only way a later request can be served. When the
+     * registry has nothing, the owning provider is asked the ordinary way, which is how NetEase
+     * answers and how QQ recovers tracks it has already seen in this session.
+     *
+     * @param hint a bean that is already known for this id (may carry the provider and MID), or
+     *             {@code null} when only the id is available
+     * @param playerUUID the player the fetch is on behalf of, so their (possibly VIP) cookie is
+     *                   used and gated tracks resolve. Pass {@code null} only where no player is
+     *                   responsible for the lookup, e.g. picking a random idle track.
+     */
+    @Nullable
+    private MusicDetail resolveDetail(long id, @Nullable MusicDetail hint, @Nullable UUID playerUUID) {
+        MusicDetail known = MusicIdRegistry.detailOf(id);
+        if (known != null) {
+            return known;
+        }
+        ApiProvider provider = hint != null && hint.getProvider() != null
+                ? hint.getProvider()
+                : MusicIdRegistry.providerOf(id);
+        List<MusicDetail> resolved = IMusicApiService.getInstance(provider).getMusicDetailByIds(List.of(id), playerUUID);
+        return resolved.size() == 1 ? resolved.getFirst() : null;
+    }
+
+    /**
+     * Finds the provider through which this player is logged in, or {@code null} when none knows
+     * them. Providers keep separate login state, so checking a single hard-coded one would make a
+     * player who only logged in to the other look unauthenticated.
+     */
+    @Nullable
+    private static ILoginApiService.PlayerLoginInfo findLoginInfo(UUID playerUUID) {
+        if (playerUUID == null) {
+            return null;
+        }
+        for (ApiProvider provider : ApiProvider.availableProviders()) {
+            ILoginApiService.PlayerLoginInfo loginInfo =
+                    ILoginApiService.getInstance(provider).getLoginInfoByPlayerUUID(playerUUID);
+            if (loginInfo != null) {
+                return loginInfo;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Every logged-in player across all providers, keyed by UUID. Used by the broadcast paths,
+     * which must reach QQ-only players as well as NetEase ones.
+     * <p>
+     * Every connecting player is inserted into <em>each</em> provider's map as
+     * {@link LoginType#UNLOGGED}, so one UUID normally appears several times and a plain
+     * {@code putAll} would let a later provider's blank entry clobber a real login. A genuinely
+     * logged-in entry therefore wins; on a tie the first provider wins, which keeps NetEase
+     * precedence and matches {@link #findLoginInfo}.
+     */
+    private static Map<UUID, ILoginApiService.PlayerLoginInfo> allPlayerLoginInfos() {
+        Map<UUID, ILoginApiService.PlayerLoginInfo> merged = new LinkedHashMap<>();
+        for (ApiProvider provider : ApiProvider.availableProviders()) {
+            for (Map.Entry<UUID, ILoginApiService.PlayerLoginInfo> entry
+                    : ILoginApiService.getInstance(provider).getPlayerInfoMap().entrySet()) {
+                merged.merge(entry.getKey(), entry.getValue(), MusicPlayerServerService::preferLoggedIn);
+            }
+        }
+        return merged;
+    }
+
+    private static ILoginApiService.PlayerLoginInfo preferLoggedIn(
+            ILoginApiService.PlayerLoginInfo first, ILoginApiService.PlayerLoginInfo second) {
+        return isLoggedIn(first) || !isLoggedIn(second) ? first : second;
+    }
+
+    private static boolean isLoggedIn(ILoginApiService.PlayerLoginInfo loginInfo) {
+        LoginCookieInfo cookieInfo = loginInfo.getLoginCookieInfo();
+        return cookieInfo != null && cookieInfo.type() != LoginType.UNLOGGED;
     }
 
     public void removeAllIdlePlaySource(PusherInfo pusherInfo) {
@@ -476,11 +605,16 @@ public class MusicPlayerServerService {
     public static class Register implements ServerRegister {
         @Override
         public void register() {
-            loginApiService.getLoginStateChangeListeners().add((set) -> {
-                if (instance != null) {
-                    instance.updateContinuable(!set.isEmpty());
-                }
-            });
+            // Attach to every provider, not just the currently advertised ones: the QQ API address
+            // is operator-configurable, so a provider can become available after this runs, and a
+            // listener attached late would miss the login that enabled it.
+            for (ApiProvider provider : ApiProvider.values()) {
+                ILoginApiService.getInstance(provider).getLoginStateChangeListeners().add((set) -> {
+                    if (instance != null) {
+                        instance.updateContinuable(!set.isEmpty());
+                    }
+                });
+            }
         }
     }
 
@@ -494,7 +628,7 @@ public class MusicPlayerServerService {
         public void vote(long id, UUID playerUUID) {
             if (!votedPlayers.contains(playerUUID) && musicDetail.getId() == id) {
                 votedPlayers.add(playerUUID);
-                voteRate += 1.0f / loginApiService.getPlayerInfoMap().size();
+                voteRate += 1.0f / allPlayerLoginInfos().size();
                 if (musicDetail.getPusherInfo().getPlayerUUID().equals(playerUUID)) {
                     voteRate += (float) serverConfig.getPusherVoteAdditionalRate();
                     logger.info("Pusher player \"{}\" voted for skip current music {}:{}", playerUUID, id, musicDetail.getName());

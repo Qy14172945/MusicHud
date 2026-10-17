@@ -6,14 +6,17 @@ import indi.etern.musichud.network.INetworkRegister;
 import indi.etern.musichud.network.NetworkReceiver;
 import indi.etern.musichud.network.payloads.C2SPayload;
 import indi.etern.musichud.network.payloads.IPayload;
+import indi.etern.musichud.network.payloads.PayloadType;
 import indi.etern.musichud.network.payloads.S2CPayload;
-import indi.etern.musichud.network.vanillaUtils.StreamCodecWrapper;
 import indi.etern.musichud.network.vanillaUtils.VanillaPlayerProxy;
-import indi.etern.musichud.platform.Environment;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 
+/**
+ * Fabric 1.20.1 has no {@code PayloadTypeRegistry}/{@code CustomPacketPayload} — raw
+ * {@link ResourceLocation} channels carrying a {@code FriendlyByteBuf} are used instead, which
+ * {@link ByteBufCodec}(ByteBuf) serialization maps onto directly.
+ */
 @SuppressWarnings("unused")
 public class FabricNetworkRegister implements INetworkRegister {
     private static volatile FabricNetworkRegister instance;
@@ -35,13 +38,13 @@ public class FabricNetworkRegister implements INetworkRegister {
             ByteBufCodec<T> codec,
             NetworkReceiver<T> serverReceiver
     ) {
-        CustomPacketPayload.Type<T> type = getMetaDataOrNew(clazz, serverReceiver).type();
-        PayloadTypeRegistry.playC2S().register(type, StreamCodecWrapper.of(codec));
+        PayloadType<T> type = getMetaDataOrNew(clazz, serverReceiver).type();
+        cacheCodec(clazz, codec);
+        ResourceLocation channel = type.id();
 
-        Environment.Side side = MusicHud.getCurrentEnvironment().getSide();
-
-        ServerPlayNetworking.registerGlobalReceiver(type, (payload, context) -> {
-            serverReceiver.receive(payload, VanillaPlayerProxy.ofPlayer(context.player()));
+        ServerPlayNetworking.registerGlobalReceiver(channel, (server, player, handler, buf, responseSender) -> {
+            T payload = codec.decode(buf);
+            server.execute(() -> serverReceiver.receive(payload, VanillaPlayerProxy.ofPlayer(player)));
         });
     }
 
@@ -51,12 +54,12 @@ public class FabricNetworkRegister implements INetworkRegister {
             ByteBufCodec<T> codec,
             NetworkReceiver<T> clientReceiver
     ) {
-        CustomPacketPayload.Type<T> type = getMetaDataOrNew(clazz, clientReceiver).type();
-        PayloadTypeRegistry.playS2C().register(type, StreamCodecWrapper.of(codec));
+        PayloadType<T> type = getMetaDataOrNew(clazz, clientReceiver).type();
+        cacheCodec(clazz, codec);
+        ResourceLocation channel = type.id();
 
-        Environment.Side side = MusicHud.getCurrentEnvironment().getSide();
-        if (side == Environment.Side.CLIENT) {
-            FabricClientNetworkRegisterUtil.register(type, clientReceiver);
+        if (MusicHud.getCurrentEnvironment().getSide() == indi.etern.musichud.platform.Environment.Side.CLIENT) {
+            FabricClientNetworkRegisterUtil.register(channel, codec, clientReceiver);
         }
     }
 

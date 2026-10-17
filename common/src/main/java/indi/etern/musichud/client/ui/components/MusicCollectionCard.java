@@ -65,9 +65,21 @@ public class MusicCollectionCard extends LinearLayout {
         } else {
             name.setText(musicCollection.getName());
         }
+        // Name and platform chip share a row so a card always names the API it is served from.
+        LinearLayout nameRow = new LinearLayout(context);
+        nameRow.setOrientation(LinearLayout.HORIZONTAL);
+        nameRow.setGravity(Gravity.CENTER_VERTICAL);
         LayoutParams params1 = new LayoutParams(MATCH_PARENT, WRAP_CONTENT);
         params1.setMargins(dp(4), 0, 0, 0);
-        addView(name, params1);
+        addView(nameRow, params1);
+
+        nameRow.addView(name, new LayoutParams(0, WRAP_CONTENT, 1));
+
+        PlatformBadge platformBadge = new PlatformBadge(context);
+        platformBadge.setProvider(musicCollection.getProvider());
+        LayoutParams badgeParams = new LayoutParams(WRAP_CONTENT, WRAP_CONTENT);
+        badgeParams.setMargins(dp(4), 0, dp(4), 0);
+        nameRow.addView(platformBadge, badgeParams);
 
         PusherInfo pusherInfo = musicCollection.getPusherInfo();
         LocalPlayer localPlayer = Minecraft.getInstance().player;

@@ -4,6 +4,7 @@ import com.google.gson.annotations.SerializedName;
 import indi.etern.musichud.client.services.MusicService;
 import indi.etern.musichud.network.ByteBufCodec;
 import indi.etern.musichud.network.Codecs;
+import indi.etern.musichud.server.api.ApiProvider;
 import lombok.*;
 
 import java.util.ArrayList;
@@ -32,6 +33,10 @@ public class Artist {
             Artist::getMusicDetails,
             Codecs.INT,
             Artist::getTotalMusicCount,
+            Codecs.ofEnum(ApiProvider.class),
+            Artist::getProvider,
+            Codecs.STRING_UTF8,
+            Artist::getExternalId,
             Artist::new
     );
     long id;
@@ -47,6 +52,14 @@ public class Artist {
     List<MusicDetail> musicDetails = new ArrayList<>();
     @Setter
     int totalMusicCount;
+    /**
+     * Which music API this artist came from. Defaults to {@link ApiProvider#NCM}.
+     */
+    ApiProvider provider = ApiProvider.NCM;
+    /**
+     * Provider-native identifier — QQ singer MID (e.g. {@code 0025NhlN2yWrP4}), empty for NetEase.
+     */
+    String externalId = "";
 
     public String getName() {
         return Objects.requireNonNullElse(name, "");

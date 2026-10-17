@@ -126,70 +126,6 @@ public interface ByteBufCodec<V> {
         };
     }
 
-    static <V, T1, T2, T3, T4, T5, T6> ByteBufCodec<V> composite(
-
-            final ByteBufCodec<T1> byteBufCodec1, final Function<V, T1> supplier1,
-            final ByteBufCodec<T2> byteBufCodec2, final Function<V, T2> supplier2,
-            final ByteBufCodec<T3> byteBufCodec3, final Function<V, T3> supplier3,
-            final ByteBufCodec<T4> byteBufCodec4, final Function<V, T4> supplier4,
-            final ByteBufCodec<T5> byteBufCodec5, final Function<V, T5> supplier5,
-            final ByteBufCodec<T6> byteBufCodec6, final Function<V, T6> supplier6,
-            final Function6<T1, T2, T3, T4, T5, T6, V> factory) {
-        return new ByteBufCodec<>() {
-            public V decode(ByteBuf object) {
-                T1 object2 = byteBufCodec1.decode(object);
-                T2 object3 = byteBufCodec2.decode(object);
-                T3 object4 = byteBufCodec3.decode(object);
-                T4 object5 = byteBufCodec4.decode(object);
-                T5 object6 = byteBufCodec5.decode(object);
-                T6 object7 = byteBufCodec6.decode(object);
-                return factory.apply(object2, object3, object4, object5, object6, object7);
-            }
-
-            public void encode(ByteBuf object, V object2) {
-                byteBufCodec1.encode(object, supplier1.apply(object2));
-                byteBufCodec2.encode(object, supplier2.apply(object2));
-                byteBufCodec3.encode(object, supplier3.apply(object2));
-                byteBufCodec4.encode(object, supplier4.apply(object2));
-                byteBufCodec5.encode(object, supplier5.apply(object2));
-                byteBufCodec6.encode(object, supplier6.apply(object2));
-            }
-        };
-    }
-
-    static <V, T1, T2, T3, T4, T5, T6, T7> ByteBufCodec<V> composite(
-            final ByteBufCodec<T1> byteBufCodec1, final Function<V, T1> supplier1,
-            final ByteBufCodec<T2> byteBufCodec2, final Function<V, T2> supplier2,
-            final ByteBufCodec<T3> byteBufCodec3, final Function<V, T3> supplier3,
-            final ByteBufCodec<T4> byteBufCodec4, final Function<V, T4> supplier4,
-            final ByteBufCodec<T5> byteBufCodec5, final Function<V, T5> supplier5,
-            final ByteBufCodec<T6> byteBufCodec6, final Function<V, T6> supplier6,
-            final ByteBufCodec<T7> byteBufCodec7, final Function<V, T7> supplier7,
-            final Function7<T1, T2, T3, T4, T5, T6, T7, V> factory) {
-        return new ByteBufCodec<>() {
-            public V decode(ByteBuf object) {
-                T1 object2 = byteBufCodec1.decode(object);
-                T2 object3 = byteBufCodec2.decode(object);
-                T3 object4 = byteBufCodec3.decode(object);
-                T4 object5 = byteBufCodec4.decode(object);
-                T5 object6 = byteBufCodec5.decode(object);
-                T6 object7 = byteBufCodec6.decode(object);
-                T7 object8 = byteBufCodec7.decode(object);
-                return factory.apply(object2, object3, object4, object5, object6, object7, object8);
-            }
-
-            public void encode(ByteBuf object, V object2) {
-                byteBufCodec1.encode(object, supplier1.apply(object2));
-                byteBufCodec2.encode(object, supplier2.apply(object2));
-                byteBufCodec3.encode(object, supplier3.apply(object2));
-                byteBufCodec4.encode(object, supplier4.apply(object2));
-                byteBufCodec5.encode(object, supplier5.apply(object2));
-                byteBufCodec6.encode(object, supplier6.apply(object2));
-                byteBufCodec7.encode(object, supplier7.apply(object2));
-            }
-        };
-    }
-
     static <V, T1, T2, T3, T4, T5, T6, T7, T8> ByteBufCodec<V> composite(
             final ByteBufCodec<T1> byteBufCodec1, final Function<V, T1> supplier1,
             final ByteBufCodec<T2> byteBufCodec2, final Function<V, T2> supplier2,
@@ -226,7 +162,7 @@ public interface ByteBufCodec<V> {
         };
     }
 
-    static <V, T1, T2, T3, T4, T5, T6, T7, T8, T9> ByteBufCodec<V> composite(
+    static <V, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10> ByteBufCodec<V> composite(
             final ByteBufCodec<T1> byteBufCodec1, final Function<V, T1> supplier1,
             final ByteBufCodec<T2> byteBufCodec2, final Function<V, T2> supplier2,
             final ByteBufCodec<T3> byteBufCodec3, final Function<V, T3> supplier3,
@@ -236,7 +172,8 @@ public interface ByteBufCodec<V> {
             final ByteBufCodec<T7> byteBufCodec7, final Function<V, T7> supplier7,
             final ByteBufCodec<T8> byteBufCodec8, final Function<V, T8> supplier8,
             final ByteBufCodec<T9> byteBufCodec9, final Function<V, T9> supplier9,
-            final Function9<T1, T2, T3, T4, T5, T6, T7, T8, T9, V> factory) {
+            final ByteBufCodec<T10> byteBufCodec10, final Function<V, T10> supplier10,
+            final Function10<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, V> factory) {
         return new ByteBufCodec<>() {
             public V decode(ByteBuf object) {
                 T1 object2 = byteBufCodec1.decode(object);
@@ -248,7 +185,8 @@ public interface ByteBufCodec<V> {
                 T7 object8 = byteBufCodec7.decode(object);
                 T8 object9 = byteBufCodec8.decode(object);
                 T9 object10 = byteBufCodec9.decode(object);
-                return factory.apply(object2, object3, object4, object5, object6, object7, object8, object9, object10);
+                T10 object11 = byteBufCodec10.decode(object);
+                return factory.apply(object2, object3, object4, object5, object6, object7, object8, object9, object10, object11);
             }
 
             public void encode(ByteBuf object, V object2) {
@@ -261,6 +199,7 @@ public interface ByteBufCodec<V> {
                 byteBufCodec7.encode(object, supplier7.apply(object2));
                 byteBufCodec8.encode(object, supplier8.apply(object2));
                 byteBufCodec9.encode(object, supplier9.apply(object2));
+                byteBufCodec10.encode(object, supplier10.apply(object2));
             }
         };
     }

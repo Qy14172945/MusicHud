@@ -12,6 +12,7 @@ import indi.etern.musichud.client.ui.hud.renderer.PlayingStatusRenderer;
 import indi.etern.musichud.interfaces.ClientConfig;
 import indi.etern.musichud.network.IClientNetworkService;
 import indi.etern.musichud.network.payloads.requestResponseCycle.GetMusicResourceRequest;
+import indi.etern.musichud.utils.NetworkDiagnostics;
 import indi.etern.musichud.network.payloads.requestResponseCycle.GetMusicResourceResponse;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -256,8 +257,14 @@ public class StreamAudioPlayer {
 
                             totalBufferedBytes.addAndGet(-audioData.length);
                         }
-                        if (clientConfig.getDisableVanillaMusic())
+                        if (VanillaMusicSuppressor.isEnabled()) {
                             Minecraft.getInstance().getSoundManager().stop(null, SoundSource.MUSIC);
+                            // Modded music players (BiomeBeats / Lost Beats) never reach the vanilla
+                            // sound engine, so a track that was already sounding has to be stopped
+                            // explicitly at the moment MusicHud takes over — otherwise it keeps
+                            // playing underneath the requested song.
+                            ExternalMusicSuppressor.stopExternalMusic();
+                        }
                         setStatus(Status.PLAYING);
                         AL10.alSourcePlay(source);
                         checkALError("alSourcePlay-Pre");
@@ -431,6 +438,7 @@ public class StreamAudioPlayer {
             } catch (Exception e) {
                 if (e instanceof SocketException e1 && e1.getMessage().equals("Closed by interrupt")) break;
                 LOGGER.error("Download error (attempt {})\n{} : {}", localRetryCount + 1, e.getClass().getSimpleName(), e.getMessage());
+                NetworkDiagnostics.reportExternalFailure(musicResourceInfo.getUrl(), e);
 
                 playedBytes = 0;
                 forceSyncInternal = true;

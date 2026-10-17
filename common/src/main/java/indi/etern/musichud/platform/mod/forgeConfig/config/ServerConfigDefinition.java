@@ -4,35 +4,40 @@ import indi.etern.musichud.MusicHud;
 import indi.etern.musichud.interfaces.ServerConfig;
 import lombok.Getter;
 import lombok.Setter;
-import net.neoforged.neoforge.common.ModConfigSpec;
+import net.minecraftforge.common.ForgeConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
 public class ServerConfigDefinition implements ServerConfig {
-    public static final Pair<ServerConfigDefinition, ModConfigSpec> configure;
+    public static final Pair<ServerConfigDefinition, ForgeConfigSpec> configure;
     @Getter
     private static ServerConfigDefinition instance;
-    private final ModConfigSpec.ConfigValue<String> serverApiBaseUrl;
-    private final ModConfigSpec.ConfigValue<Boolean> startupBinaryApiServerWhenLaunch;
-    private final ModConfigSpec.ConfigValue<String> serverApiBinaryExecutablePath;
-    private final ModConfigSpec.ConfigValue<Double> pusherVoteAdditionalRate;
-    private final ModConfigSpec.ConfigValue<Boolean> useRandomCnIp;
-    private final ModConfigSpec.ConfigValue<String> corsAllowOrigin;
-    private final ModConfigSpec.ConfigValue<Boolean> enableProxy;
-    private final ModConfigSpec.ConfigValue<String> proxyUrl;
-    private final ModConfigSpec.ConfigValue<Boolean> enableGeneralUnblock;
-    private final ModConfigSpec.ConfigValue<Boolean> enableFlac;
-    private final ModConfigSpec.ConfigValue<Boolean> selectMaxBr;
-    private final ModConfigSpec.ConfigValue<Boolean> followSourceOrder;
-    private final ModConfigSpec.ConfigValue<Integer> port;
+    private final ForgeConfigSpec.ConfigValue<String> serverApiBaseUrl;
+    private final ForgeConfigSpec.ConfigValue<String> qqApiBaseUrl;
+    private final ForgeConfigSpec.ConfigValue<Boolean> startupBinaryApiServerWhenLaunch;
+    private final ForgeConfigSpec.ConfigValue<String> serverApiBinaryExecutablePath;
+    private final ForgeConfigSpec.ConfigValue<Double> pusherVoteAdditionalRate;
+    private final ForgeConfigSpec.ConfigValue<Boolean> useRandomCnIp;
+    private final ForgeConfigSpec.ConfigValue<String> corsAllowOrigin;
+    private final ForgeConfigSpec.ConfigValue<Boolean> enableProxy;
+    private final ForgeConfigSpec.ConfigValue<String> proxyUrl;
+    private final ForgeConfigSpec.ConfigValue<Boolean> enableGeneralUnblock;
+    private final ForgeConfigSpec.ConfigValue<Boolean> enableFlac;
+    private final ForgeConfigSpec.ConfigValue<Boolean> selectMaxBr;
+    private final ForgeConfigSpec.ConfigValue<Boolean> followSourceOrder;
+    private final ForgeConfigSpec.ConfigValue<Integer> port;
     @Setter
     @Getter
     private boolean configured;
 
-    public ServerConfigDefinition(ModConfigSpec.Builder builder) {
+    public ServerConfigDefinition(ForgeConfigSpec.Builder builder) {
         serverApiBaseUrl = builder
                 .comment("Server API base URL configuration")
                 .translation(MusicHud.MOD_ID + ".serverApiBaseUrl")
                 .define("serverApiBaseUrl", "http://localhost:3000");
+        qqApiBaseUrl = builder
+                .comment("QQ Music API base URL. The QQ provider is served by a separate Node.js process (@sansenjian/qq-music-api), NOT the NetEase API server")
+                .translation(MusicHud.MOD_ID + ".qqApiBaseUrl")
+                .define("qqApiBaseUrl", "http://localhost:3200");
         startupBinaryApiServerWhenLaunch = builder
                 .comment("Startup binary api server when game launch")
                 .translation(MusicHud.MOD_ID + ".startupBinaryApiServerWhenLaunch")
@@ -85,7 +90,7 @@ public class ServerConfigDefinition implements ServerConfig {
     }
 
     static {
-         configure = new ModConfigSpec.Builder().configure(ServerConfigDefinition::new);
+         configure = new ForgeConfigSpec.Builder().configure(ServerConfigDefinition::new);
     }
 
     @Override
@@ -196,6 +201,16 @@ public class ServerConfigDefinition implements ServerConfig {
     @Override
     public String getServerApiBaseUrl() {
         return serverApiBaseUrl.get();
+    }
+
+    @Override
+    public String getQqApiBaseUrl() {
+        return qqApiBaseUrl.get();
+    }
+
+    @Override
+    public void setQqApiBaseUrl(String qqApiBaseUrl) {
+        this.qqApiBaseUrl.set(qqApiBaseUrl);
     }
 
     @Override

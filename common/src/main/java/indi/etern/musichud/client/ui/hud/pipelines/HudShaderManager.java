@@ -27,11 +27,37 @@ public class HudShaderManager {
         return vs + "|" + fs;
     }
     private static final Pattern MOJ_IMPORT = Pattern.compile("#moj_import\\s+<([^>]+)>");
-    private static int bindingPoint;
+    /** Next binding point to hand out; when negative it has not been initialised yet. */
+    private static int bindingPoint = -1;
+    /** Never hand out a point below this, even if the implementation reports a tiny limit. */
+    private static final int MIN_BINDING_POINT = 8;
     private static final Map<String, Integer> boundPoints = new HashMap<>();
 
+    /**
+     * Allocates a uniform-block binding point for {@code name}.
+     *
+     * <p>Points are handed out from the <em>top</em> of
+     * {@code GL_MAX_UNIFORM_BUFFER_BINDINGS} downwards. That is deliberate: uniform-block binding
+     * points are global context state, not per-program, and every other consumer in the process
+     * (vanilla shaders, Oculus/Iris shader packs, other mods) allocates them from 0 upwards. When
+     * the HUD used 0, 1, 2… its blocks collided with shader-pack blocks: whoever bound last won
+     * for the other's draws, so a shader pack reading its own block got the HUD's position data
+     * and the world geometry flickered. Growing downward keeps this mod's points out of every
+     * range that grows upward.
+     */
     public static synchronized int getOrCreateBindingPoint(String name) {
-        return boundPoints.computeIfAbsent(name, k -> bindingPoint++);
+        return boundPoints.computeIfAbsent(name, k -> {
+            if (bindingPoint < 0) {
+                int max = 16;
+                try {
+                    max = glGetInteger(GL_MAX_UNIFORM_BUFFER_BINDINGS);
+                } catch (Throwable ignored) {
+                    // Keep the OpenGL 3.1 minimum when the query is unavailable.
+                }
+                bindingPoint = Math.max(MIN_BINDING_POINT, max - 1);
+            }
+            return bindingPoint--;
+        });
     }
 
     public static Integer getBindingPoint(String name) {
@@ -153,7 +179,7 @@ public class HudShaderManager {
         String[] parts = importRef.split(":", 2);
         String namespace = parts[0];
         String path = parts[1];
-        ResourceLocation location = ResourceLocation.fromNamespaceAndPath(namespace, "shaders/include/" + path);
+        ResourceLocation location = new ResourceLocation(namespace, "shaders/include/" + path);
         return readRawResource(location);
     }
 

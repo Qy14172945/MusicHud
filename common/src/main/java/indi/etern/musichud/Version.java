@@ -6,7 +6,7 @@ import org.jetbrains.annotations.NotNull;
 
 public record Version(long mayor, long minor, long patch, BuildType build) implements Comparable<Version>{
     public static final ByteBufCodec<Version> PACKET_CODEC;
-    public static final Version current = new Version(1,2,15, BuildType.Stable);
+    public static final Version current = new Version(1,2,16, BuildType.Stable);
     public static final Version leastCapable = new Version(1,2,2,BuildType.Stable);
 
     static {
@@ -22,14 +22,6 @@ public record Version(long mayor, long minor, long patch, BuildType build) imple
                 byteBuf.writeInt(version.build.ordinal());
             }
         };
-    }
-
-    private long[] toLongArray() {
-        return new long[]{mayor, minor, patch, build.ordinal()};
-    }
-
-    private static Version ofLongArray(long[] longs) {
-        return new Version(longs[0], longs[1], longs[2], BuildType.ofOrdinal((int) longs[3]));
     }
 
     public enum BuildType {

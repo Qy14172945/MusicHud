@@ -9,6 +9,9 @@ import indi.etern.musichud.server.api.ApiProvider;
 import indi.etern.musichud.server.api.ILoginApiService;
 import indi.etern.musichud.utils.ServerDataPacketVThreadExecutor;
 
+/**
+ * Email + password login. NetEase-only: QQ Music's API surface exposes no email login endpoint.
+ */
 public record EmailPasswordLoginRequest(String email, String md5password) implements C2SPayload {
     public static final ByteBufCodec<EmailPasswordLoginRequest> CODEC =
             ByteBufCodec.composite(

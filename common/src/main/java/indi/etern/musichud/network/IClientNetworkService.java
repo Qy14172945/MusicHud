@@ -14,18 +14,25 @@ public interface IClientNetworkService {
     void sendToNetworkServer(C2SPayload payload);
 
     default <T extends C2SPayload> void sendToServer(T payload) {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.getCurrentServer() != null && (MusicHud.getConnectStatus() == MusicHud.ConnectStatus.CONNECTED
-                || payload instanceof ConnectRequest)) {
-            sendToNetworkServer(payload);
-        } else if ((minecraft.getCurrentServer() != null || minecraft.player != null)
-                && ClientConfig.getInstance().getEnableIsolatedMode()){// in single player game or isolated client
-            //noinspection unchecked
-            NetworkReceiver<T> receiver = (NetworkReceiver<T>) INetworkRegister.getInstance()
-                    .getMetaDataOrNew(payload.getClass(), null).receiver();
-            if (receiver != null) {
-                receiver.receive(payload, VanillaPlayerProxy.ofPlayer(minecraft.player));
+        // A failure here must not escape: callers include the ModernUI UI thread and the
+        // client-join handler. An unhandled throw used to break the caller mid-update, which
+        // showed up as the interface flickering in multiplayer.
+        try {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.getCurrentServer() != null && (MusicHud.getConnectStatus() == MusicHud.ConnectStatus.CONNECTED
+                    || payload instanceof ConnectRequest)) {
+                sendToNetworkServer(payload);
+            } else if ((minecraft.getCurrentServer() != null || minecraft.player != null)
+                    && ClientConfig.getInstance().getEnableIsolatedMode()){// in single player game or isolated client
+                //noinspection unchecked
+                NetworkReceiver<T> receiver = (NetworkReceiver<T>) INetworkRegister.getInstance()
+                        .getMetaDataOrNew(payload.getClass(), null).receiver();
+                if (receiver != null) {
+                    receiver.receive(payload, VanillaPlayerProxy.ofPlayer(minecraft.player));
+                }
             }
+        } catch (Throwable t) {
+            MusicHud.LOGGER.error("Failed to dispatch C2S payload {}", payload.getClass().getName(), t);
         }
     }
 

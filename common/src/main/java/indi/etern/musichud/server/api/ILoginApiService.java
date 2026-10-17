@@ -19,10 +19,10 @@ import java.util.function.Supplier;
 
 public interface ILoginApiService {
     static ILoginApiService getInstance(ApiProvider apiProvider) {
-        if (Objects.requireNonNull(apiProvider) == ApiProvider.NCM) {
-            return LoginApiService.getInstance();
-        }
-        throw new IllegalArgumentException("Invalid api provider");
+        return switch (Objects.requireNonNull(apiProvider)) {
+            case NCM -> LoginApiService.getInstance();
+            case QQ -> indi.etern.musichud.server.api.impl.qq.QqLoginApiService.getInstance();
+        };
     }
 
     String getAnonymousCookie();
@@ -73,7 +73,9 @@ public interface ILoginApiService {
         public void register() {
             IServerEventService.getInstance().registerCommonPlayerQuit(player -> {
                 MusicHud.EXECUTOR.execute(() -> {
-                    getInstance(ApiProvider.NCM).logout(player);
+                    for (ApiProvider provider : ApiProvider.values()) {
+                        getInstance(provider).logout(player);
+                    }
                 });
             });
         }

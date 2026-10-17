@@ -1,23 +1,36 @@
 package indi.etern.musichud.platform.mod.forgeConfig.config;
 
 import indi.etern.musichud.MusicHud;
+import com.google.gson.reflect.TypeToken;
 import indi.etern.musichud.beans.api.AutoConnectServerFilterType;
 import indi.etern.musichud.beans.login.LoginCookieInfo;
+import indi.etern.musichud.beans.login.LoginType;
 import indi.etern.musichud.beans.music.Quality;
 import indi.etern.musichud.client.config.ProfileConfigData;
 import indi.etern.musichud.client.ui.hud.metadata.HorizontalAlign;
 import indi.etern.musichud.client.ui.hud.metadata.VerticalAlign;
 import indi.etern.musichud.interfaces.ClientConfig;
+import indi.etern.musichud.server.api.ApiProvider;
 import indi.etern.musichud.utils.JsonUtil;
 import lombok.Getter;
 import lombok.Setter;
-import net.neoforged.neoforge.common.ModConfigSpec;
+import net.minecraftforge.common.ForgeConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.lang.reflect.Type;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ClientConfigDefinition implements ClientConfig {
-    public static Pair<ClientConfigDefinition, ModConfigSpec> configure;
+    public static Pair<ClientConfigDefinition, ForgeConfigSpec> configure;
+    /**
+     * Reflected type of the {@code clientCookies} map, resolved once — Gson needs the element type
+     * to deserialize records, and a record's canonical constructor cannot be inferred from a raw
+     * class literal.
+     */
+    private static final Type COOKIE_MAP_TYPE = new TypeToken<Map<String, LoginCookieInfo>>() {
+    }.getType();
     @Getter
     private static ClientConfigDefinition instance;
 
@@ -25,40 +38,43 @@ public class ClientConfigDefinition implements ClientConfig {
         configure();
     }
 
-    private final ModConfigSpec.ConfigValue<Boolean> enable;
-    private final ModConfigSpec.ConfigValue<Boolean> showTranslatedCnLyrics;
-    private final ModConfigSpec.ConfigValue<Boolean> disableVanillaMusic;
-    private final ModConfigSpec.ConfigValue<Boolean> enableHud;
-    private final ModConfigSpec.ConfigValue<Boolean> hideHudWhenNotPlaying;
-    private final ModConfigSpec.ConfigValue<Boolean> enableMarqueeText;
-    private final ModConfigSpec.ConfigValue<Boolean> mixWithVanillaSoundVolume;
-    private final ModConfigSpec.ConfigValue<Integer> soundVolume;
-    private final ModConfigSpec.ConfigValue<Integer> soundVolumeInterval;
-    private final ModConfigSpec.ConfigValue<Boolean> muted;
-    private final ModConfigSpec.ConfigValue<String> primaryChosenQuality;
-    private final ModConfigSpec.ConfigValue<Double> mainScreenAdditionalBackgroundDarken;
-    private final ModConfigSpec.ConfigValue<Double> hudBackgroundMixAlpha;
+    private final ForgeConfigSpec.ConfigValue<Boolean> enable;
+    private final ForgeConfigSpec.ConfigValue<Boolean> showTranslatedCnLyrics;
+    private final ForgeConfigSpec.ConfigValue<Boolean> disableVanillaMusic;
+    private final ForgeConfigSpec.ConfigValue<Boolean> enableHud;
+    private final ForgeConfigSpec.ConfigValue<Boolean> hideHudWhenNotPlaying;
+    private final ForgeConfigSpec.ConfigValue<Boolean> enableMarqueeText;
+    private final ForgeConfigSpec.ConfigValue<Boolean> mixWithVanillaSoundVolume;
+    private final ForgeConfigSpec.ConfigValue<Integer> soundVolume;
+    private final ForgeConfigSpec.ConfigValue<Integer> soundVolumeInterval;
+    private final ForgeConfigSpec.ConfigValue<Boolean> muted;
+    private final ForgeConfigSpec.ConfigValue<String> primaryChosenQuality;
+    private final ForgeConfigSpec.ConfigValue<String> selectedApiProvider;
+    private final ForgeConfigSpec.ConfigValue<Boolean> mergeSearchProviders;
+    private final ForgeConfigSpec.ConfigValue<Double> mainScreenAdditionalBackgroundDarken;
+    private final ForgeConfigSpec.ConfigValue<Double> hudBackgroundMixAlpha;
 
-    private final ModConfigSpec.ConfigValue<String> hudVerticalPosition;
-    private final ModConfigSpec.ConfigValue<String> hudHorizontalPosition;
-    private final ModConfigSpec.ConfigValue<Integer> hudOffsetX;
-    private final ModConfigSpec.ConfigValue<Integer> hudOffsetY;
-    private final ModConfigSpec.ConfigValue<Integer> hudWidth;
-    private final ModConfigSpec.ConfigValue<Integer> hudHeight;
-    private final ModConfigSpec.ConfigValue<Integer> hudCornerRadius;
-    private final ModConfigSpec.ConfigValue<String> clientCookie;
-    private final ModConfigSpec.ConfigValue<String> clientAccountConfig;
-    private final ModConfigSpec.ConfigValue<Boolean> enabledInIntegratedServer;
-    private final ModConfigSpec.ConfigValue<Boolean> enableAutoConnect;
-    private final ModConfigSpec.ConfigValue<Boolean> enableIsolatedMode;
-    private final ModConfigSpec.ConfigValue<String> autoConnectServerFilterType;
-    private final ModConfigSpec.ConfigValue<String> autoConnectBlackList;
-    private final ModConfigSpec.ConfigValue<String> autoConnectWhiteList;
+    private final ForgeConfigSpec.ConfigValue<String> hudVerticalPosition;
+    private final ForgeConfigSpec.ConfigValue<String> hudHorizontalPosition;
+    private final ForgeConfigSpec.ConfigValue<Integer> hudOffsetX;
+    private final ForgeConfigSpec.ConfigValue<Integer> hudOffsetY;
+    private final ForgeConfigSpec.ConfigValue<Integer> hudWidth;
+    private final ForgeConfigSpec.ConfigValue<Integer> hudHeight;
+    private final ForgeConfigSpec.ConfigValue<Integer> hudCornerRadius;
+    private final ForgeConfigSpec.ConfigValue<String> clientCookie;
+    private final ForgeConfigSpec.ConfigValue<String> clientCookies;
+    private final ForgeConfigSpec.ConfigValue<String> clientAccountConfig;
+    private final ForgeConfigSpec.ConfigValue<Boolean> enabledInIntegratedServer;
+    private final ForgeConfigSpec.ConfigValue<Boolean> enableAutoConnect;
+    private final ForgeConfigSpec.ConfigValue<Boolean> enableIsolatedMode;
+    private final ForgeConfigSpec.ConfigValue<String> autoConnectServerFilterType;
+    private final ForgeConfigSpec.ConfigValue<String> autoConnectBlackList;
+    private final ForgeConfigSpec.ConfigValue<String> autoConnectWhiteList;
     @Setter
     @Getter
     private boolean configured;
 
-    ClientConfigDefinition(ModConfigSpec.Builder builder) {
+    ClientConfigDefinition(ForgeConfigSpec.Builder builder) {
         enable = builder
                 .comment("Enable Music HUD Functions")
                 .translation(MusicHud.MOD_ID + ".config.common.enable")
@@ -87,6 +103,14 @@ public class ClientConfigDefinition implements ClientConfig {
                 .comment("Primary chosen quality")
                 .translation(MusicHud.MOD_ID + ".config.common.primaryChosenQuality")
                 .define("primaryChosenQuality", Quality.LOSSLESS.name());
+        selectedApiProvider = builder
+                .comment("Music provider used for searching and browsing (NCM = NetEase Cloud Music, QQ = QQ Music)")
+                .translation(MusicHud.MOD_ID + ".config.common.selectedApiProvider")
+                .define("selectedApiProvider", ApiProvider.NCM.name());
+        mergeSearchProviders = builder
+                .comment("Merge search results from every API provider, ranked by relevance")
+                .translation(MusicHud.MOD_ID + ".config.common.mergeSearchProviders")
+                .define("mergeSearchProviders", true);
         mainScreenAdditionalBackgroundDarken = builder
                 .comment("Main Screen Additional Background Darken Rate")
                 .translation(MusicHud.MOD_ID + ".config.common.mainScreenAdditionalBackgroundDarken")
@@ -143,6 +167,10 @@ public class ClientConfigDefinition implements ClientConfig {
                 .comment("Client NCM cookie json")
                 .translation(MusicHud.MOD_ID + ".internal.clientCookie")
                 .define("clientCookie", "");
+        clientCookies = builder
+                .comment("Client login cookies per API provider (json object keyed by provider name)")
+                .translation(MusicHud.MOD_ID + ".internal.clientCookies")
+                .define("clientCookies", "");
         clientAccountConfig = builder
                 .comment("Client account config json")
                 .translation(MusicHud.MOD_ID + ".internal.clientAccountConfig")
@@ -176,7 +204,7 @@ public class ClientConfigDefinition implements ClientConfig {
 
     public static void configure() {
         if (configure == null) {
-            configure = new ModConfigSpec.Builder().configure(ClientConfigDefinition::new);
+            configure = new ForgeConfigSpec.Builder().configure(ClientConfigDefinition::new);
         }
     }
 
@@ -293,6 +321,37 @@ public class ClientConfigDefinition implements ClientConfig {
     }
 
     @Override
+    public ApiProvider getSelectedApiProvider() {
+        String value = selectedApiProvider.get();
+        if (value == null || value.isBlank()) {
+            return ApiProvider.NCM;
+        }
+        try {
+            return ApiProvider.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            // A provider removed in a newer build leaves an unreadable value behind; browsing
+            // NetEase is always a valid answer, so degrade instead of crashing the config screen.
+            return ApiProvider.NCM;
+        }
+    }
+
+    @Override
+    public void setSelectedApiProvider(ApiProvider selectedApiProvider) {
+        this.selectedApiProvider.set(selectedApiProvider == null ? ApiProvider.NCM.name() : selectedApiProvider.name());
+    }
+
+    @Override
+    public boolean getMergeSearchProviders() {
+        Boolean value = mergeSearchProviders.get();
+        return value == null || value;
+    }
+
+    @Override
+    public void setMergeSearchProviders(boolean mergeSearchProviders) {
+        this.mergeSearchProviders.set(mergeSearchProviders);
+    }
+
+    @Override
     public VerticalAlign getHudVerticalPosition() {
         return VerticalAlign.valueOf(hudVerticalPosition.get());
     }
@@ -370,6 +429,84 @@ public class ClientConfigDefinition implements ClientConfig {
     @Override
     public void setClientCookie(LoginCookieInfo clientCookie) {
         this.clientCookie.set(JsonUtil.gson.toJson(clientCookie));
+    }
+
+    /**
+     * The per-provider cookie map, decoded from {@code clientCookies}.
+     * <p>
+     * A cookie saved by a build that only had the single {@code clientCookie} slot is folded in on
+     * read, so upgrading does not log the user out. A malformed value degrades to an empty map for
+     * the same reason: a broken config must not be able to break the login screen.
+     */
+    @Override
+    public Map<ApiProvider, LoginCookieInfo> getClientCookies() {
+        Map<ApiProvider, LoginCookieInfo> cookies = new LinkedHashMap<>();
+        String json = clientCookies.get();
+        if (json != null && !json.isBlank()) {
+            try {
+                Map<String, LoginCookieInfo> decoded = JsonUtil.gson.fromJson(json, COOKIE_MAP_TYPE);
+                if (decoded != null) {
+                    for (Map.Entry<String, LoginCookieInfo> entry : decoded.entrySet()) {
+                        LoginCookieInfo value = entry.getValue();
+                        if (value != null) {
+                            cookies.put(providerOfKey(entry.getKey(), value), value);
+                        }
+                    }
+                }
+            } catch (RuntimeException ignored) {
+                // Fall through to the legacy slot / empty map.
+            }
+        }
+        LoginCookieInfo legacy = getClientCookie();
+        if (legacy != null && legacy.type() != null && legacy.type() != LoginType.UNLOGGED
+                && legacy.rawCookie() != null && !legacy.rawCookie().isBlank()) {
+            cookies.putIfAbsent(legacy.provider(), legacy);
+        }
+        return cookies;
+    }
+
+    @Override
+    public void setClientCookie(ApiProvider provider, LoginCookieInfo clientCookie) {
+        if (provider == null && clientCookie == null) {
+            return;
+        }
+        ApiProvider target = provider != null ? provider : clientCookie.provider();
+        Map<String, LoginCookieInfo> raw = new LinkedHashMap<>();
+        String json = clientCookies.get();
+        if (json != null && !json.isBlank()) {
+            try {
+                Map<String, LoginCookieInfo> decoded = JsonUtil.gson.fromJson(json, COOKIE_MAP_TYPE);
+                if (decoded != null) {
+                    raw.putAll(decoded);
+                }
+            } catch (RuntimeException ignored) {
+                // Rewrite the value from scratch below rather than fail the login.
+            }
+        }
+        if (clientCookie == null || clientCookie.type() == LoginType.UNLOGGED) {
+            raw.remove(target.name());
+        } else {
+            raw.put(target.name(), clientCookie);
+        }
+        clientCookies.set(JsonUtil.gson.toJson(raw));
+    }
+
+    @Override
+    public void removeClientCookie(ApiProvider provider) {
+        if (provider != null) {
+            setClientCookie(provider, null);
+        }
+    }
+
+    private static ApiProvider providerOfKey(String key, LoginCookieInfo value) {
+        if (key != null) {
+            try {
+                return ApiProvider.valueOf(key);
+            } catch (IllegalArgumentException ignored) {
+                // Fall back to the provider stored inside the cookie itself.
+            }
+        }
+        return value.provider();
     }
 
     @Override

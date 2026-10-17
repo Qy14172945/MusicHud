@@ -8,6 +8,7 @@ import indi.etern.musichud.interfaces.RegisterMark;
 import indi.etern.musichud.network.ByteBufCodec;
 import indi.etern.musichud.network.INetworkRegister;
 import indi.etern.musichud.network.IServerNetworkService;
+import indi.etern.musichud.network.IPlayerClient;
 import indi.etern.musichud.network.payloads.C2SPayload;
 import indi.etern.musichud.platform.Environment;
 import indi.etern.musichud.server.api.ApiProvider;
@@ -39,22 +40,34 @@ public record ConnectRequest(Version clientVersion) implements C2SPayload {
             INetworkRegister.getInstance().autoRegisterPayload(
                     ConnectRequest.class, CODEC,
                     ServerDataPacketVThreadExecutor.execute((startQRLoginRequest, player) -> {
-                        ILoginApiService instance = ILoginApiService.getInstance(ApiProvider.NCM);
                         boolean compatible = Version.compatibleWith(startQRLoginRequest.clientVersion());
                         if (MusicHud.getCurrentEnvironment().getSide() == Environment.Side.CLIENT && !clientConfig.getEnabledInIntegratedServer()) {
                             if (compatible) {
-                                instance.joinUnlogged(player);
+                                joinUnloggedOnEveryProvider(player);
                             }
                             return;
                         }
-                        ConnectResponse response = new ConnectResponse(compatible, Version.current, List.of(ApiProvider.NCM));
+                        ConnectResponse response = new ConnectResponse(compatible, Version.current, ApiProvider.availableProviders());
                         IServerNetworkService.getInstance().sendToPlayer(player, response);
                         if (compatible) {
-                            instance.joinUnlogged(player);
+                            joinUnloggedOnEveryProvider(player);
                             MusicPlayerServerService.getInstance().sendSyncPlayingStatusToPlayer(player);
                         }
                     })
             );
+        }
+
+        /**
+         * Registers the player as connected on every backend.
+         * <p>
+         * Each login service keeps its own player map, and the idle-play-source bookkeeping keys on
+         * it, so joining only NetEase would leave the player unknown to QQ (and vice versa) until
+         * they explicitly logged in there.
+         */
+        private static void joinUnloggedOnEveryProvider(IPlayerClient player) {
+            for (ApiProvider provider : ApiProvider.availableProviders()) {
+                ILoginApiService.getInstance(provider).joinUnlogged(player);
+            }
         }
     }
 }

@@ -8,8 +8,10 @@ import indi.etern.musichud.client.config.ProfileConfigData;
 import indi.etern.musichud.client.ui.hud.metadata.HorizontalAlign;
 import indi.etern.musichud.client.ui.hud.metadata.VerticalAlign;
 import indi.etern.musichud.platform.Environment;
+import indi.etern.musichud.server.api.ApiProvider;
 
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 
 public interface ClientConfig {
@@ -48,6 +50,17 @@ public interface ClientConfig {
     Quality getPrimaryChosenQuality();
 
     void setPrimaryChosenQuality(Quality primaryChosenQuality);
+
+    /**
+     * The music provider the player browses and searches with (NetEase or QQ Music).
+     * <p>
+     * The server only serves providers it advertises in its {@code ConnectResponse}; a selection
+     * the connected server cannot serve is answered by the server's fallback rather than by an
+     * error.
+     */
+    ApiProvider getSelectedApiProvider();
+
+    void setSelectedApiProvider(ApiProvider selectedApiProvider);
 
     VerticalAlign getHudVerticalPosition();
 
@@ -98,6 +111,29 @@ public interface ClientConfig {
     LoginCookieInfo getClientCookie();
 
     void setClientCookie(LoginCookieInfo clientCookie);
+
+    /**
+     * Every stored login cookie, keyed by the backend that issued it.
+     * <p>
+     * One slot per provider is what makes a dual login possible: a NetEase cookie is meaningless to
+     * QQ Music and vice versa, so storing them in a single slot (the previous behaviour) meant
+     * logging in to the second backend silently discarded the first one's session.
+     */
+    Map<ApiProvider, LoginCookieInfo> getClientCookies();
+
+    /** Stores one backend's cookie, replacing only that backend's slot. */
+    void setClientCookie(ApiProvider provider, LoginCookieInfo clientCookie);
+
+    /** Drops one backend's cookie, leaving the other backends logged in. */
+    void removeClientCookie(ApiProvider provider);
+
+    /**
+     * Whether the search page merges the results of every available backend, ranked by relevance,
+     * instead of asking the single selected one.
+     */
+    boolean getMergeSearchProviders();
+
+    void setMergeSearchProviders(boolean mergeSearchProviders);
 
     ProfileConfigData getClientAccountConfig();
 

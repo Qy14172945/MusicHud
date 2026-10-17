@@ -77,7 +77,22 @@ public class ApiServerManager implements ServerRegister {
         }
         if (serverConfig.getStartupBinaryApiServerWhenLaunch()) {
             launchApiServerInternal();
+        } else {
+            // Even without launching our own binary an API server may already be reachable (a
+            // remote deployment, or one the user started by hand). Probing it here means the
+            // status label reports "external" instead of claiming the server is stopped.
+            probeExistingApiServer();
         }
+    }
+
+    private void probeExistingApiServer() {
+        MusicHud.EXECUTOR.execute(() -> {
+            Thread.currentThread().setName("MHWorker-API-Probe");
+            if (ApiClient.checkAvailable()) {
+                apiLogger.info("API Server (version: {}) is reachable at {}", ApiClient.getVersion(), ApiClient.getActiveBaseUrl());
+                setApiStatus(BinaryApiServerStatus.EXTERNAL);
+            }
+        });
     }
 
     public void stopApiServer() {
@@ -90,7 +105,21 @@ public class ApiServerManager implements ServerRegister {
     }
 
     public void restartApiServer() {
-        triedCount = 0;
+        restartApiServer(true);
+    }
+
+    /**
+     * @param resetRetryBudget {@code true} for a user-initiated restart, which earns a fresh
+     *                         budget; {@code false} for an automatic retry after a failed probe,
+     *                         so a server that keeps starting but never answers eventually gives
+     *                         up instead of respawning without limit. Resetting the budget on the
+     *                         automatic path is what turned one unreachable API address into an
+     *                         endless launch/restart loop.
+     */
+    private void restartApiServer(boolean resetRetryBudget) {
+        if (resetRetryBudget) {
+            triedCount = 0;
+        }
         stopApiServer();
         if (processFuture != null) {
             processFuture.thenRun(this::launchApiServerInternal);
@@ -123,7 +152,8 @@ public class ApiServerManager implements ServerRegister {
             Thread.currentThread().setName("MHWorker-API-Launcher");
             boolean apiAvailable = ApiClient.checkAvailable();
             if (!apiAvailable) {
-                triedCount = 0;
+                // The retry budget is deliberately not reset here: it accumulates across the
+                // automatic relaunches below so startEmbeddedApiServer() can eventually stop.
                 startEmbeddedApiServer();
                 Environment.Side side = MusicHud.getCurrentEnvironment().getSide();
                 if (side == Environment.Side.CLIENT) {
@@ -133,6 +163,7 @@ public class ApiServerManager implements ServerRegister {
                 }
             } else {
                 apiLogger.info("API Server (version: {}) has been launched externally", ApiClient.getVersion());
+                setApiStatus(BinaryApiServerStatus.EXTERNAL);
             }
         });
     }
@@ -201,7 +232,10 @@ public class ApiServerManager implements ServerRegister {
                                 if (writer != null) writer.println(line);
                                 if ((line.contains("Server started successfully") || line.contains("ncm_api_rs::server"))
                                         && binaryApiServerStatus == BinaryApiServerStatus.LAUNCHING) {
-                                    boolean available = ApiClient.checkAvailable();
+                                    // Probe the process we just started, at its own local address:
+                                    // the configured base URL may point at an unrelated remote
+                                    // deployment, whose health says nothing about our child process.
+                                    boolean available = ApiClient.checkAvailableAt(ApiEndpoint.embedded());
                                     setApiStatus(BinaryApiServerStatus.RUNNING);
                                     if (available) {
                                         apiLogger.info("Api server started, version: {}", ApiClient.getVersion());
@@ -215,7 +249,7 @@ public class ApiServerManager implements ServerRegister {
                                         } catch (Exception ignored) {}
                                     } else {
                                         apiLogger.info("Api server started, but unavailable, restarting");
-                                        restartApiServer();
+                                        restartApiServer(false);
                                         return;
                                     }
                                 }
@@ -295,7 +329,13 @@ public class ApiServerManager implements ServerRegister {
     }
 
     public enum BinaryApiServerStatus {
-        STOPPED, LAUNCHING, RUNNING;
+        STOPPED, LAUNCHING, RUNNING,
+        /**
+         * An API server answers, but this mod did not launch it — a remote deployment, or a
+         * process the user started themselves. Distinguished from {@link #RUNNING} so the status
+         * label can say so instead of showing "Stopped" for a perfectly reachable server.
+         */
+        EXTERNAL;
 
         public String i18nKey() {
             return MusicHud.MOD_ID + ".text.binaryApiServerStatus." + name();

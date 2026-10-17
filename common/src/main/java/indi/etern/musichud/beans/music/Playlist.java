@@ -5,6 +5,7 @@ import indi.etern.musichud.beans.user.Profile;
 import indi.etern.musichud.client.services.MusicService;
 import indi.etern.musichud.network.ByteBufCodec;
 import indi.etern.musichud.network.Codecs;
+import indi.etern.musichud.server.api.ApiProvider;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -36,6 +37,10 @@ public class Playlist implements MusicCollection {
             Playlist::getTracks,
             PusherInfo.CODEC,
             Playlist::getPusherInfo,
+            Codecs.ofEnum(ApiProvider.class),
+            Playlist::getProvider,
+            Codecs.STRING_UTF8,
+            Playlist::getExternalId,
             Playlist::new
     );
 
@@ -56,8 +61,18 @@ public class Playlist implements MusicCollection {
     // Not contained in the original API response, set separately
     @Getter
     PusherInfo pusherInfo = PusherInfo.EMPTY;
+    /**
+     * Which music API this playlist came from. Defaults to {@link ApiProvider#NCM}.
+     */
+    @Getter
+    ApiProvider provider = ApiProvider.NCM;
+    /**
+     * Provider-native identifier — QQ {@code disstid}, empty for NetEase.
+     */
+    @Getter
+    String externalId = "";
 
-    protected Playlist(
+    public Playlist(
             long id,
             String name,
             long coverImgId,
@@ -66,7 +81,9 @@ public class Playlist implements MusicCollection {
             Profile creator,
             Privacy privacy,
             List<MusicDetail> tracks,
-            PusherInfo pusherInfo
+            PusherInfo pusherInfo,
+            ApiProvider provider,
+            String externalId
     ) {
         this.id = id;
         this.name = name;
@@ -77,6 +94,8 @@ public class Playlist implements MusicCollection {
         this.privacy = privacy;
         this.tracks = tracks;
         this.pusherInfo = pusherInfo;
+        this.provider = provider == null ? ApiProvider.NCM : provider;
+        this.externalId = externalId == null ? "" : externalId;
     }
 
     public static Playlist privacyBlocked(long id, Profile creator) {
@@ -130,9 +149,11 @@ public class Playlist implements MusicCollection {
     public String getThumbnailCoverUrl(int size) {
         if (coverImgUrl.startsWith("data:image")) {
             return coverImgUrl;
-        } else {
-            return coverImgUrl + "?param=" + size + "y" + size;
         }
+        if (coverImgUrl.isEmpty()) {
+            return "";
+        }
+        return coverImgUrl + (coverImgUrl.indexOf('?') >= 0 ? "&" : "?") + "param=" + size + "y" + size;
     }
 
     public Profile getCreator() {
@@ -181,6 +202,8 @@ public class Playlist implements MusicCollection {
         playlist.creator = creator;
         playlist.privacy = privacy;
         playlist.pusherInfo = pusherInfo;
+        playlist.provider = provider;
+        playlist.externalId = externalId;
         return playlist;
     }
 
@@ -194,6 +217,8 @@ public class Playlist implements MusicCollection {
             playlist.creator = creator == Profile.ANONYMOUS ? Profile.PRIVATE_MASK : creator;
             playlist.privacy = privacy;
             playlist.pusherInfo = pusherInfo;
+            playlist.provider = provider;
+            playlist.externalId = externalId;
             return playlist;
         } else {
             return copyWithPusherInfo(pusherInfo);

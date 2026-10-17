@@ -86,14 +86,26 @@ public class MusicCollectionDetailView extends LinearLayout {
         params1.setMargins(dp(16), 0, 0, 0);
         topBar.addView(briefInfo, params1);
 
+        // The collection type ("playlist"/"album") shares a row with the platform chip: both
+        // providers can be browsed at once, and this page's track list resolves against its own.
+        LinearLayout typeRow = new LinearLayout(context);
+        typeRow.setOrientation(LinearLayout.HORIZONTAL);
+        typeRow.setGravity(Gravity.CENTER_VERTICAL);
+        LayoutParams typeRowParams = new LayoutParams(WRAP_CONTENT, WRAP_CONTENT);
+        typeRowParams.setMargins(0, 0, 0, dp(4));
+        briefInfo.addView(typeRow, typeRowParams);
+
         type = new TextView(context);
         type.setTextSize(Theme.TEXT_SIZE_LARGE);
         type.setTextColor(Theme.SECONDARY_TEXT_COLOR);
         type.setText(I18n.get(collectionNameI18n));
-        LayoutParams params2 = new LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params2.setMargins(0, 0, 0, dp(4));
-        type.setLayoutParams(params2);
-        briefInfo.addView(type);
+        typeRow.addView(type);
+
+        PlatformBadge platformBadge = new PlatformBadge(context);
+        platformBadge.setProvider(musicCollection.getProvider());
+        LayoutParams platformBadgeParams = new LayoutParams(WRAP_CONTENT, WRAP_CONTENT);
+        platformBadgeParams.setMargins(dp(8), 0, 0, 0);
+        typeRow.addView(platformBadge, platformBadgeParams);
 
         TextView name = new TextView(context);
         name.setTextSize(Theme.TEXT_SIZE_LARGER);

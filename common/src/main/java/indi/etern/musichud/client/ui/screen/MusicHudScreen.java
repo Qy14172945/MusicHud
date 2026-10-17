@@ -95,23 +95,18 @@ public class MusicHudScreen extends Screen implements MuiScreen {
     }
 
     @Override
-    public void renderBackground(@NonNull GuiGraphics gr, int mouseX, int mouseY, float deltaTick) {
+    public void render(@NonNull GuiGraphics gr, int mouseX, int mouseY, float deltaTick) {
+        // Minecraft 1.20.1 has no Screen.renderBackground(GuiGraphics, int, int, float) hook,
+        // so the background pass is folded into render() (as Modern UI's own 1.20.1
+        // forge SimpleScreen does).
         ScreenCallback callback = getCallback();
         if (callback == null || callback.hasDefaultBackground()) {
-            if (minecraft != null && minecraft.level == null) {
-                super.renderBackground(gr, mouseX, mouseY, deltaTick);
-            } else {
-                BlurHandler.INSTANCE.drawScreenBackground(gr, 0, 0, this.width, this.height);
-            }
+            BlurHandler.INSTANCE.drawScreenBackground(gr, 0, 0, this.width, this.height);
             float progress = Math.clamp((float) MuiModApi.getElapsedTime() / FADE_IN_DURATION_MILLIS, 0, 1);
             gr.fill(0, 0, this.width, this.height, Color.argb((int) (progress * darken * 255), 0, 0, 0));//additional darken
         }
-        mHost.render(gr, mouseX, mouseY, deltaTick);
-    }
-
-    @Override
-    public void render(@NonNull GuiGraphics gr, int mouseX, int mouseY, float deltaTick) {
         super.render(gr, mouseX, mouseY, deltaTick);
+        mHost.render(gr, mouseX, mouseY, deltaTick);
     }
 
     @Override
@@ -187,11 +182,10 @@ public class MusicHudScreen extends Screen implements MuiScreen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
-        if (super.mouseScrolled(mouseX, mouseY, deltaX, deltaY)) {
-            return true;
-        }
-        mHost.onScroll(deltaX, deltaY);
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        // Minecraft 1.20.1 reports a single combined scroll delta. Modern UI's own
+        // MixinMouseHandler already forwards raw scroll to MuiModApi (whose UIManager
+        // hook is private here), so the screen only consumes the event.
         return true;
     }
 

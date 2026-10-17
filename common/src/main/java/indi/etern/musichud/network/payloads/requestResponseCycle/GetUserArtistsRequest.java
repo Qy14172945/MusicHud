@@ -1,5 +1,6 @@
 package indi.etern.musichud.network.payloads.requestResponseCycle;
 
+import indi.etern.musichud.MusicHud;
 import indi.etern.musichud.beans.music.Artist;
 import indi.etern.musichud.interfaces.CommonRegister;
 import indi.etern.musichud.interfaces.RegisterMark;
@@ -13,8 +14,13 @@ import indi.etern.musichud.utils.ServerDataPacketVThreadExecutor;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Asks for the player's own followed artists. See {@link GetUserPlaylistRequest} for why the
+ * backend comes from the player's session instead of configuration.
+ */
 @NoArgsConstructor(access = AccessLevel.PUBLIC)
 public class GetUserArtistsRequest implements C2SPayload {
     public static final GetUserArtistsRequest REQUEST = new GetUserArtistsRequest();
@@ -26,7 +32,17 @@ public class GetUserArtistsRequest implements C2SPayload {
             INetworkRegister.getInstance().autoRegisterPayload(
                     GetUserArtistsRequest.class, CODEC,
                     ServerDataPacketVThreadExecutor.execute((getUserPlaylistRequest, player) -> {
-                        List<Artist> playersUserArtists = IMusicApiService.getInstance(ApiProvider.NCM).getPlayersUserSubscribedArtists(player.getUUID());
+                        List<Artist> playersUserArtists = new ArrayList<>();
+                        for (ApiProvider provider : ApiProvider.providersLoggedInFor(player.getUUID())) {
+                            try {
+                                playersUserArtists.addAll(
+                                        IMusicApiService.getInstance(provider)
+                                                .getPlayersUserSubscribedArtists(player.getUUID()));
+                            } catch (Exception e) {
+                                MusicHud.getLogger(GetUserArtistsRequest.class)
+                                        .warn("Could not load {} artists for {}", provider, player.getUUID(), e);
+                            }
+                        }
                         IServerNetworkService.getInstance().sendToPlayer(player, new GetUserArtistsResponse(playersUserArtists));
                     })
             );

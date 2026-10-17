@@ -10,6 +10,7 @@ import indi.etern.musichud.network.IServerNetworkService;
 import indi.etern.musichud.network.payloads.C2SPayload;
 import indi.etern.musichud.server.api.ApiProvider;
 import indi.etern.musichud.server.api.IMusicApiService;
+import indi.etern.musichud.server.api.MusicIdRegistry;
 import indi.etern.musichud.utils.ServerDataPacketVThreadExecutor;
 
 public record GetPlaylistDetailRequest(long id) implements C2SPayload {
@@ -25,7 +26,13 @@ public record GetPlaylistDetailRequest(long id) implements C2SPayload {
             INetworkRegister.getInstance().autoRegisterPayload(
                     GetPlaylistDetailRequest.class, CODEC,
                     ServerDataPacketVThreadExecutor.execute((playlistDetailRequest, player) -> {
-                        Playlist playlistDetail = IMusicApiService.getInstance(ApiProvider.NCM).getPlaylistDetail(playlistDetailRequest.id, player.getUUID());
+                        // The request only carries a numeric id, so the owning provider (and its own
+                        // identifier for the entity) is resolved from the server-side id registry.
+                        ApiProvider provider = MusicIdRegistry.providerOf(playlistDetailRequest.id);
+                        Playlist playlistDetail = IMusicApiService.getInstance(provider)
+                                .getPlaylistDetail(playlistDetailRequest.id,
+                                        MusicIdRegistry.externalIdOf(playlistDetailRequest.id),
+                                        player.getUUID());
                         if (playlistDetail != null) {
                             IServerNetworkService.getInstance().sendToPlayer(player,new GetPlaylistDetailResponse(playlistDetail));
                         }

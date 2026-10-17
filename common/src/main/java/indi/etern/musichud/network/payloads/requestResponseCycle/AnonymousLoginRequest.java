@@ -10,6 +10,15 @@ import indi.etern.musichud.server.api.ILoginApiService;
 import indi.etern.musichud.utils.ServerDataPacketVThreadExecutor;
 import lombok.EqualsAndHashCode;
 
+/**
+ * Logs the player in anonymously.
+ * <p>
+ * NetEase-only by design: NetEase's API hands out an anonymous cookie, while QQ Music has no
+ * anonymous tier at all — {@code QqLoginApiService.getAnonymousCookie()} returns an empty string
+ * and {@code /getMusicPlay} refuses to return a playable URL without a real logged-in cookie.
+ * A player who only wants to browse QQ needs no anonymous session: connecting already registers
+ * them with every provider through {@code ConnectRequest#joinUnlogged}.
+ */
 @EqualsAndHashCode
 public class AnonymousLoginRequest implements C2SPayload {
     public static final AnonymousLoginRequest REQUEST = new AnonymousLoginRequest();

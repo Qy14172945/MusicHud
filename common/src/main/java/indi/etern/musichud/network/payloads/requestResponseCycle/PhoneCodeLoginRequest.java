@@ -10,6 +10,15 @@ import indi.etern.musichud.server.api.ApiProvider;
 import indi.etern.musichud.server.api.ILoginApiService;
 import indi.etern.musichud.utils.ServerDataPacketVThreadExecutor;
 
+/**
+ * Phone + SMS-code login.
+ * <p>
+ * Deliberately pinned to NetEase: this is a NetEase account operation with no QQ counterpart (QQ
+ * Music only issues sessions through QR scanning). The record doubles as the request body for
+ * NetEase's own {@code /login/cellphone} call, so it must not gain extra fields — a provider
+ * field here would be serialized into that upstream request. Selecting QQ in the config therefore
+ * affects browsing and QR login, not this tab.
+ */
 public record PhoneCodeLoginRequest(int regionCode, long phone, int code) implements C2SPayload {
     public static final ByteBufCodec<PhoneCodeLoginRequest> CODEC =
             ByteBufCodec.composite(

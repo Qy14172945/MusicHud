@@ -16,7 +16,13 @@ public class Blaze3DAudioLibraryInitMixin {
     @Unique
     private boolean music_hud$hrtfEnabled;
 
-    @Redirect(method = "init", at = @At(
+    // `require = 0` on both redirects is deliberate. They take over an instruction that other
+    // audio mods also redirect (Sound Physics Remastered does, see MusicHudMixinPlugin), and a
+    // redirect that loses that conflict is reported as a failed injection -- with the config's
+    // default `require = 1` that is a fatal MixinTransformerError which kills the launch. Losing
+    // the conflict is survivable here (the other mod then owns the OpenAL context), so the
+    // injections must degrade to "not applied" instead of to a crash.
+    @Redirect(method = "init", require = 0, at = @At(
             value = "INVOKE",
             target = "Lcom/mojang/blaze3d/audio/Library;setHrtf(Z)V"
     ))
@@ -27,6 +33,7 @@ public class Blaze3DAudioLibraryInitMixin {
 
     @Redirect(
             method = "init",
+            require = 0,
             at = @At(
                     value = "INVOKE",
                     target = "Lorg/lwjgl/openal/ALC10;alcCreateContext(JLjava/nio/IntBuffer;)J"

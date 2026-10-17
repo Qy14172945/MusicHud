@@ -2,7 +2,6 @@ plugins {
     id 'dev.architectury.loom' version '1.17.487' apply false
     id 'architectury-plugin' version '3.5.169'
     id 'com.gradleup.shadow' version '9.2.2' apply false
-    id 'io.papermc.paperweight.userdev' version '2.0.0-beta.19' apply false
 }
 
 architectury {
@@ -14,7 +13,7 @@ allprojects {
     version = rootProject.mod_version + "+" + rootProject.minecraft_version_range
 }
 
-configure(subprojects.findAll { it.name != 'paper' }) {
+configure(subprojects) {
     apply plugin: 'dev.architectury.loom'
     apply plugin: 'architectury-plugin'
     apply plugin: 'com.gradleup.shadow'
@@ -28,8 +27,10 @@ configure(subprojects.findAll { it.name != 'paper' }) {
     repositories {
         mavenLocal()
         maven {
+            // raw.githubusercontent.com is unreachable on this network (connection reset),
+            // so the Fuzs Mod Resources repository is consumed through the ghproxy mirror.
             name = "Fuzs Mod Resources"
-            url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/"
+            url = "https://ghproxy.net/https://raw.githubusercontent.com/Fuzss/modresources/main/maven/"
         }
         maven {
             name = "Terraformers"
@@ -47,9 +48,6 @@ configure(subprojects.findAll { it.name != 'paper' }) {
             name "JitPack"
             url 'https://jitpack.io'
         }
-        flatDir{
-            dir "$projectDir/libs"
-        }
     }
 
     loom {
@@ -65,7 +63,9 @@ configure(subprojects.findAll { it.name != 'paper' }) {
         testAnnotationProcessor "org.projectlombok:lombok:$rootProject.lombok_version"
         testImplementation "org.junit.jupiter:junit-jupiter:$rootProject.junit_version"
         testRuntimeOnly "org.junit.platform:junit-platform-launcher"
-        implementation "dev.icyllis:modernui-core:$rootProject.modernui_version"
+        // For MC 1.20.1 the ModernUI artifacts live under the `icyllis.modernui` group on
+        // maven.izzel.io (`dev.icyllis:modernui-core` does not exist for 3.12.0).
+        implementation "icyllis.modernui:ModernUI-Core:$rootProject.modernui_version"
         implementation("icyllis.modernui:ModernUI-Markflow:$rootProject.modernui_version") {
 //            exclude group: "icyllis.modernui", module: "ModernUI-Core"
         }

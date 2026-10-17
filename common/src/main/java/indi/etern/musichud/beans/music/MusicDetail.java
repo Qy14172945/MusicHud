@@ -3,6 +3,7 @@ package indi.etern.musichud.beans.music;
 import com.google.gson.annotations.SerializedName;
 import indi.etern.musichud.network.ByteBufCodec;
 import indi.etern.musichud.network.Codecs;
+import indi.etern.musichud.server.api.ApiProvider;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -32,6 +33,10 @@ public class MusicDetail {
             MusicDetail::getPusherInfo,
             LyricInfo.CODEC,
             MusicDetail::getLyricInfo,
+            Codecs.ofEnum(ApiProvider.class),
+            MusicDetail::getProvider,
+            Codecs.STRING_UTF8,
+            MusicDetail::getExternalId,
             MusicDetail::new
     );
     public static final MusicDetail NONE = new MusicDetail();
@@ -66,8 +71,21 @@ public class MusicDetail {
     PusherInfo pusherInfo = PusherInfo.EMPTY;
     @Setter
     LyricInfo lyricInfo = LyricInfo.NONE;
+    /**
+     * Which music API this track came from. Defaults to {@link ApiProvider#NCM} so that entities
+     * deserialized from the NetEase API (and the existing {@code long} id space) keep working.
+     */
+    @Getter
+    ApiProvider provider = ApiProvider.NCM;
+    /**
+     * Provider-native identifier. For {@link ApiProvider#QQ} this is the song MID (e.g.
+     * {@code 0039MnYb0qxYhV}) because QQ's detail/lyric/play endpoints reject numeric ids.
+     * Empty for {@link ApiProvider#NCM}, whose {@link #id} is already the native identifier.
+     */
+    @Getter
+    String externalId = "";
 
-    protected MusicDetail(
+    public MusicDetail(
             String name,
             long id,
             List<Artist> artists,
@@ -76,7 +94,9 @@ public class MusicDetail {
             int durationMillis,
             List<String> translations,
             PusherInfo pusherInfo,
-            LyricInfo lyricInfo
+            LyricInfo lyricInfo,
+            ApiProvider provider,
+            String externalId
     ) {
         this.name = name;
         this.id = id;
@@ -87,6 +107,8 @@ public class MusicDetail {
         this.translations = translations;
         this.pusherInfo = pusherInfo;
         this.lyricInfo = lyricInfo;
+        this.provider = provider == null ? ApiProvider.NCM : provider;
+        this.externalId = externalId == null ? "" : externalId;
     }
 
     public String getName() {

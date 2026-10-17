@@ -4,7 +4,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
-import icyllis.arc3d.core.ColorSpaces;
+import icyllis.arc3d.core.ColorSpace;
 import icyllis.modernui.annotation.NonNull;
 import icyllis.modernui.annotation.Nullable;
 import icyllis.modernui.core.Context;
@@ -17,6 +17,7 @@ import icyllis.modernui.mc.UIManager;
 import icyllis.modernui.text.TextPaint;
 import icyllis.modernui.text.style.ImageSpan;
 import indi.etern.musichud.MusicHud;
+import indi.etern.musichud.utils.NetworkDiagnostics;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -45,6 +46,9 @@ import static indi.etern.musichud.MusicHud.getLogger;
 
 public class ImageUtils {
     private static final Logger LOGGER = getLogger(ImageUtils.class);
+
+    // ModernUI 3.12.0 has no ColorSpaces holder class; resolve SRGB explicitly.
+    private static final ColorSpace SRGB_COLOR_SPACE = ColorSpace.get(ColorSpace.Named.SRGB);
 
     private static final int DEFAULT_MAX_CONCURRENT_DOWNLOADS = 40;
     @Getter(AccessLevel.PACKAGE)
@@ -214,6 +218,7 @@ public class ImageUtils {
                 throw new CompletionException("Download interrupted", e);
             } catch (Exception e) {
                 LOGGER.error("Failed to download image from {} : {}", url, e.getMessage());
+                NetworkDiagnostics.reportExternalFailure(url, e);
                 throw new CompletionException(e);
             }
         }, downloadExecutor);
@@ -263,7 +268,7 @@ public class ImageUtils {
                 height,
                 Bitmap.Format.RGBA_8888,
                 false,
-                ColorSpaces.SRGB)
+                SRGB_COLOR_SPACE)
         ) {
             wrap.setPixels(bitmap, 0, 0, 0, 0, width, height);
         }
@@ -283,7 +288,7 @@ public class ImageUtils {
                 height,
                 Bitmap.Format.RGBA_8888,
                 false,
-                ColorSpaces.SRGB);
+                SRGB_COLOR_SPACE);
     }
 
     @SuppressWarnings("unused")

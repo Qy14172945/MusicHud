@@ -139,7 +139,7 @@ public class SearchView extends LinearLayout {
             searchMeta1.pendingFuture = new CompletableFuture<>();
             searchMetas.put(searchType, searchMeta1);
             searchRefreshListeners.forEach(listener -> listener.accept(searchMeta1));
-            clientNetworkService.sendToServer(new SearchRequest(searchText, searchType, 0));
+            clientNetworkService.sendToServer(new SearchRequest(searchText, searchType, 0, clientConfig.getSelectedApiProvider(), clientConfig.getMergeSearchProviders()));
         }
     }
 
@@ -153,7 +153,7 @@ public class SearchView extends LinearLayout {
             int offset = searchMeta.nextOffset;
             searchMeta.pendingFuture = new CompletableFuture<>();
             searchRefreshListeners.forEach(listener -> listener.accept(searchMeta));
-            clientNetworkService.sendToServer(new SearchRequest(text, searchType, offset));
+            clientNetworkService.sendToServer(new SearchRequest(text, searchType, offset, clientConfig.getSelectedApiProvider(), clientConfig.getMergeSearchProviders()));
         }
     }
 

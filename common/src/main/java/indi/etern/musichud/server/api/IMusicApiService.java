@@ -12,10 +12,10 @@ import java.util.function.Function;
 
 public interface IMusicApiService {
     static IMusicApiService getInstance(ApiProvider apiProvider) {
-        if (Objects.requireNonNull(apiProvider) == ApiProvider.NCM) {
-            return MusicApiService.getInstance();
-        }
-        throw new IllegalArgumentException("Invalid api provider");
+        return switch (Objects.requireNonNull(apiProvider)) {
+            case NCM -> MusicApiService.getInstance();
+            case QQ -> indi.etern.musichud.server.api.impl.qq.QqMusicApiService.getInstance();
+        };
     }
 
     Playlist getPlaylistDetail(long id, @Nullable UUID player);
@@ -47,4 +47,27 @@ public interface IMusicApiService {
     List<Artist> getPlayersUserSubscribedArtists(UUID playerUUID);
 
     LyricInfo getLyricInfo(MusicDetail musicDetail);
+
+    /*
+     * --- Provider-native identifier (externalId) overloads -------------------------------------
+     * NetEase addresses everything by numeric id, so its implementations inherit the delegating
+     * defaults below. QQ Music addresses songs/albums/artists/playlists by MID strings and its
+     * endpoints reject the numeric id, so QqMusicApiService overrides these.
+     */
+
+    default Album getAlbumInfoDetail(long id, String externalId, UUID playerUUID) {
+        return getAlbumInfoDetail(id, playerUUID);
+    }
+
+    default Artist getArtistDetail(long id, String externalId, UUID playerUUID) {
+        return getArtistDetail(id, playerUUID);
+    }
+
+    default List<MusicDetail> getArtistMoreMusic(long id, String externalId, int offset, UUID playerUUID) {
+        return getArtistMoreMusic(id, offset, playerUUID);
+    }
+
+    default Playlist getPlaylistDetail(long id, String externalId, @Nullable UUID player) {
+        return getPlaylistDetail(id, player);
+    }
 }

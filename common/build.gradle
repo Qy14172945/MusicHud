@@ -30,16 +30,17 @@ dependencies {
 
     testImplementation "org.junit.jupiter:junit-jupiter:$rootProject.junit_version"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"
-    api "fuzs.forgeconfigapiport:forgeconfigapiport-common-neoforgeapi:$rootProject.forge_config_api_port_version"
+    // For MC 1.20.1 the 8.0.x FCAP line only ships `-common` and `-fabric`;
+    // `-common-neoforgeapi` / `-common-forgeapi` start at the 20.4.x (1.20.4+) line.
+    api "fuzs.forgeconfigapiport:forgeconfigapiport-common:$rootProject.forge_config_api_port_version"
 
     implementation "com.github.umjammer:jlayer:$rootProject.jlayer_version"
     implementation "org.jflac:jflac-codec:$rootProject.jflac_version"
 
-//    implementation "io.github.selemba1000:JavaMediaTransportControls:$rootProject.jmtc_version"
     implementation "com.github.hypfvieh:dbus-java-core:$rootProject.dbus_version"
     implementation "com.github.hypfvieh:dbus-java-transport-native-unixsocket:$rootProject.dbus_version"
 
-    compileOnly "icyllis.modernui:ModernUI-NeoForge:1.21.1-$rootProject.modernui_version.+"
+    compileOnly "icyllis.modernui:ModernUI-Forge:1.20.1-$rootProject.modernui_version.1"
 }
 
 test {

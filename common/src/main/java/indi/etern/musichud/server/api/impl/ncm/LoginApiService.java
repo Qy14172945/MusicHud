@@ -377,12 +377,12 @@ public class LoginApiService implements ILoginApiService {
 
     @Override
     public void disconnectToAll() {
-        serverNetworkService.sendToPlayerInfos(playerInfoMap.values(), new ConnectResponse(false, Version.current, List.of(ApiProvider.NCM)));
+        serverNetworkService.sendToPlayerInfos(playerInfoMap.values(), new ConnectResponse(false, Version.current, ApiProvider.availableProviders()));
     }
 
     @Override
     public void reconnectAll() {
-        serverNetworkService.sendToPlayerInfos(playerInfoMap.values(), new ConnectResponse(true, Version.current, List.of(ApiProvider.NCM)));
+        serverNetworkService.sendToPlayerInfos(playerInfoMap.values(), new ConnectResponse(true, Version.current, ApiProvider.availableProviders()));
     }
 
     @Override

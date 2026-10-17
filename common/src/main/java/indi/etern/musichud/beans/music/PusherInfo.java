@@ -5,7 +5,6 @@ import indi.etern.musichud.network.Codecs;
 import indi.etern.musichud.network.IPlayerClient;
 import indi.etern.musichud.server.api.ApiProvider;
 import indi.etern.musichud.server.api.ILoginApiService;
-import indi.etern.musichud.server.api.impl.ncm.LoginApiService;
 import lombok.Getter;
 import lombok.NonNull;
 
@@ -34,15 +33,17 @@ public final class PusherInfo {
     }
 
     public static PusherInfo ofPlayer(IPlayerClient player) {
-        LoginApiService.PlayerLoginInfo loginInfo = ILoginApiService.getInstance(ApiProvider.NCM).getPlayerInfoMap().get(player.getUUID());
-        PusherInfo pusherInfo = PusherInfo.EMPTY;
-        if (loginInfo != null) {
-            pusherInfo = new PusherInfo(
-                    player.getUUID(),
-                    player.getName()
-            );
+        // The login info is only used as an "is this player known?" signal, so any provider that
+        // holds the player counts. Checking NetEase alone would hand a QQ-only player EMPTY, which
+        // would lose the idle-play-source ownership that removal is authorised against.
+        for (ApiProvider provider : ApiProvider.availableProviders()) {
+            ILoginApiService.PlayerLoginInfo loginInfo =
+                    ILoginApiService.getInstance(provider).getPlayerInfoMap().get(player.getUUID());
+            if (loginInfo != null) {
+                return new PusherInfo(player.getUUID(), player.getName());
+            }
         }
-        return pusherInfo;
+        return PusherInfo.EMPTY;
     }
 
     @Override

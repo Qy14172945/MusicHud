@@ -30,8 +30,9 @@ import indi.etern.musichud.network.payloads.requestResponseCycle.ConnectRequest;
 import indi.etern.musichud.network.payloads.requestResponseCycle.CookieLoginRequest;
 import indi.etern.musichud.network.payloads.requestResponseCycle.StartQRLoginResponse;
 import indi.etern.musichud.network.vanillaUtils.VanillaPlayerProxy;
+import indi.etern.musichud.server.api.ApiProvider;
+import indi.etern.musichud.server.api.ILoginApiService;
 import indi.etern.musichud.server.api.MusicPlayerServerService;
-import indi.etern.musichud.server.api.impl.ncm.LoginApiService;
 import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.client.Minecraft;
@@ -43,6 +44,7 @@ import java.time.Period;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -130,19 +132,29 @@ public class LoginService {
     }
 
     private static void loginToServerByCookieWithRefreshCheck() {
-        LoginCookieInfo loginCookieInfo = LoginCookieInfo.clientCurrentCookie();
-        if (loginCookieInfo.generateTime().plus(refreshInterval).isBefore(ZonedDateTime.now())) {
-            logger.info("Refreshing Login Cookie");
-            IClientNetworkService.getInstance().sendToServer(new CookieLoginRequest(loginCookieInfo, true));
-        } else {
-            IClientNetworkService.getInstance().sendToServer(new CookieLoginRequest(loginCookieInfo, false));
+        Map<ApiProvider, LoginCookieInfo> cookies = LoginCookieInfo.clientCurrentCookies();
+        if (cookies.isEmpty()) {
+            getInstance().loginAsAnonymousToServer();
+            return;
         }
+        ZonedDateTime now = ZonedDateTime.now();
+        // One request per backend: each login service only accepts cookies it issued, so a single
+        // request carrying "the" cookie could never restore both sessions. This is the client half
+        // of the dual login.
+        cookies.forEach((provider, loginCookieInfo) -> {
+            boolean tryRefresh = loginCookieInfo.generateTime() == null
+                    || loginCookieInfo.generateTime().plus(refreshInterval).isBefore(now);
+            if (tryRefresh) {
+                logger.info("Refreshing {} login cookie", provider);
+            }
+            IClientNetworkService.getInstance().sendToServer(new CookieLoginRequest(loginCookieInfo, tryRefresh));
+        });
     }
 
     public boolean isLogined() {
-        LoginCookieInfo loginCookieInfo = LoginCookieInfo.clientCurrentCookie();
-        return loginCookieInfo.type() != LoginType.UNLOGGED &&
-                loginCookieInfo.type() != LoginType.ANONYMOUS;
+        return LoginCookieInfo.clientCurrentCookies().values().stream()
+                .anyMatch(loginCookieInfo -> loginCookieInfo.type() != LoginType.UNLOGGED
+                        && loginCookieInfo.type() != LoginType.ANONYMOUS);
     }
 
     public void connectAsPrevious() {
@@ -183,6 +195,7 @@ public class LoginService {
 
     public void logout() {
         clientNetworkService.sendToServer(LogoutMessage.MESSAGE);
+        LoginCookieInfo.clearClientCookies();
         Profile.setCurrent(Profile.ANONYMOUS);
         loginAsAnonymousToServer();
     }
@@ -323,7 +336,13 @@ public class LoginService {
                 MusicHud.EXECUTOR.execute(() -> {
                     if (MusicHud.getConnectStatus() == MusicHud.ConnectStatus.NOT_CONNECTED) {
                         if (clientConfig.getEnableIsolatedMode()) {
-                            LoginApiService.getInstance().logout(VanillaPlayerProxy.ofPlayer(player));
+                            // In isolated mode the client IS the server, so a quit has to drop the
+                            // player from every backend the way LogoutMessage does — logging out of
+                            // NetEase alone would leave a QQ session alive on the local server.
+                            VanillaPlayerProxy playerProxy = VanillaPlayerProxy.ofPlayer(player);
+                            for (ApiProvider provider : ApiProvider.availableProviders()) {
+                                ILoginApiService.getInstance(provider).logout(playerProxy);
+                            }
                         }
                     } else {
                         MusicHud.setConnectStatus(MusicHud.ConnectStatus.NOT_CONNECTED);

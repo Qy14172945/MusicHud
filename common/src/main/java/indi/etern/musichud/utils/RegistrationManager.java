@@ -10,6 +10,9 @@ import java.util.Set;
 public class RegistrationManager {
     private static final String[] CLIENT_REGISTRIES = new String[]{
             "indi.etern.musichud.client.config.Keybinds",
+            // Installs the local-player supplier before any S2C payload can ask for it, and keeps
+            // the Minecraft reference out of the server-loadable VanillaPlayerProxy.
+            "indi.etern.musichud.client.utils.ClientLocalPlayerInstaller",
             "indi.etern.musichud.client.services.LoginService$RegisterImpl",
             "indi.etern.musichud.client.services.MusicService$RegisterImpl"
     };

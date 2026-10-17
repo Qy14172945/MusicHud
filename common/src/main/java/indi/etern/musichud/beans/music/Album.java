@@ -5,6 +5,7 @@ import indi.etern.musichud.MusicHud;
 import indi.etern.musichud.client.services.MusicService;
 import indi.etern.musichud.network.ByteBufCodec;
 import indi.etern.musichud.network.Codecs;
+import indi.etern.musichud.server.api.ApiProvider;
 import lombok.*;
 
 import java.util.ArrayList;
@@ -29,6 +30,10 @@ public class Album implements MusicCollection{
             Album::getArtists,
             PusherInfo.CODEC,
             Album::getPusherInfo,
+            Codecs.ofEnum(ApiProvider.class),
+            Album::getProvider,
+            Codecs.STRING_UTF8,
+            Album::getExternalId,
             Album::new
     );
     public static final Album NONE = new Album();
@@ -44,9 +49,25 @@ public class Album implements MusicCollection{
     // Not contained in the original API response, set separately
     @Getter
     transient PusherInfo pusherInfo = PusherInfo.EMPTY;
+    /**
+     * Which music API this album came from. Defaults to {@link ApiProvider#NCM} so NetEase
+     * responses keep their existing (numeric {@link #id}) identity.
+     */
+    @Getter
+    transient ApiProvider provider = ApiProvider.NCM;
+    /**
+     * Provider-native identifier — QQ album MID, empty for NetEase.
+     */
+    @Getter
+    transient String externalId = "";
 
     public String getThumbnailPicUrl(int size) {
-        return picUrl + "?param=" + size + "y" + size;
+        if (picUrl == null || picUrl.isEmpty()) {
+            // QQ entries occasionally arrive without artwork; emitting a bare "?param=…" makes the
+            // image loader log "URI is not absolute" for every such row.
+            return "";
+        }
+        return picUrl + (picUrl.indexOf('?') >= 0 ? "&" : "?") + "param=" + size + "y" + size;
     }
 
     public String getName() {
@@ -89,6 +110,8 @@ public class Album implements MusicCollection{
         album.id = this.id;
         album.name = this.name;
         album.picUrl = this.picUrl;
+        album.provider = this.provider;
+        album.externalId = this.externalId;
         return album;
     }
 

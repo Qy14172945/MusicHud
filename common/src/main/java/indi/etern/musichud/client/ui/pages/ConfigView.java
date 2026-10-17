@@ -164,6 +164,8 @@ public class ConfigView extends LinearLayout {
                     clientConfig::setPrimaryChosenQuality)
                     .setDefaultValue(Quality.LOSSLESS)
                     .create(commonCategory);
+            // The music-source switch no longer lives in the config: both providers stay
+            // connected and the source is picked on the home page.
             new PreferencesFragment.FloatOption(
                     context,
                     I18n.get(MusicHud.MOD_ID + ".config.common.mainScreenAdditionalBackgroundDarken"),
@@ -391,15 +393,16 @@ public class ConfigView extends LinearLayout {
             enableInIntegratedServerOption.create(integratedServerCategory);
             ApiServerManager apiServerManager = ApiServerManager.getInstance();
             enableInIntegratedServerOption.setOnChanged(() -> {
-                ILoginApiService loginApiService = ILoginApiService.getInstance(ApiProvider.NCM);
                 if (clientConfig.getEnabledInIntegratedServer()) {
                     if (apiServerManager != null) {
                         apiServerManager.restartApiServer();
                     }
-                    loginApiService.reconnectAll();
+                    // Every provider keeps its own login state, so reconnecting has to walk them
+                    // all; a QQ-only session would stay disconnected otherwise.
+                    ApiProvider.availableProviders().forEach(provider -> ILoginApiService.getInstance(provider).reconnectAll());
                 } else {
                     MusicPlayerServerService.getInstance().reset();
-                    loginApiService.disconnectToAll();
+                    ApiProvider.availableProviders().forEach(provider -> ILoginApiService.getInstance(provider).disconnectToAll());
                     if (apiServerManager != null) {
                         apiServerManager.stopApiServer();
                     }
@@ -549,6 +552,29 @@ public class ConfigView extends LinearLayout {
                 apiCategory.addView(inputBox);
             }
 
+            {
+                LinearLayout inputBox = PreferencesFragment.createInputBox(context, I18n.get(MusicHud.MOD_ID + ".config.apiServer.qqApiBaseUrl"));
+                EditText input = inputBox.findViewById(R.id.input);
+                if (input != null) {
+                    input.setMinimumWidth(dp(256));
+                    input.setTextAlignment(TEXT_ALIGNMENT_TEXT_START);
+                    input.setText(serverConfig.getQqApiBaseUrl());
+                    input.setOnKeyListener((v, c, e) -> {
+                        if (c == GLFW.GLFW_KEY_ENTER) {
+                            input.clearFocus();
+                            return true;
+                        }
+                        return false;
+                    });
+                    input.setOnFocusChangeListener((v, b) -> {
+                        if (!b) {
+                            serverConfig.setQqApiBaseUrl(input.getText().toString());
+                        }
+                    });
+                }
+                apiCategory.addView(inputBox);
+            }
+
             final EditText[] serverApiBinaryPathInput = {null};
 
             {
@@ -616,32 +642,15 @@ public class ConfigView extends LinearLayout {
             apiServerStatusLayout.addView(restartApiServerButton);
             apiCategory.addView(apiServerStatusLayout);
 
-            LinearLayout apiVersionLinearLayout = new LinearLayout(context);
-            apiVersionLinearLayout.setOrientation(LinearLayout.HORIZONTAL);
-            apiVersionLinearLayout.setGravity(Gravity.LEFT);
-            apiVersionLinearLayout.setVerticalGravity(Gravity.CENTER);
-            LayoutParams params2 = new LayoutParams(MATCH_PARENT, dp(44));
-            params2.setMargins(dp(6), 0, dp(6), 0);
-            apiVersionLinearLayout.setLayoutParams(params2);
+            final TextView apiVersionLabel = createApiVersionRow(context, apiCategory, backgroundFactory,
+                    ApiProvider.NCM,
+                    MusicHud.MOD_ID + ".text.apiServiceVersion",
+                    MusicHud.MOD_ID + ".button.checkApiServerVersion");
 
-            TextView apiVersionLabel = new TextView(context);
-            apiVersionLabel.setTextSize(14);
-            String apiServiceVersionTemplate = I18n.get(MusicHud.MOD_ID + ".text.apiServiceVersion");
-            apiVersionLabel.setText(apiServiceVersionTemplate.replace("{}", I18n.get(ApiClient.getVersion())));
-
-            Button checkVersionButton = new Button(context);
-            checkVersionButton.setText(I18n.get(MusicHud.MOD_ID + ".button.checkApiServerVersion"));
-            checkVersionButton.setTextColor(Theme.PRIMARY_COLOR);
-            checkVersionButton.setTextSize(14);
-            checkVersionButton.setBackground(backgroundFactory.newBackgroundDrawable());
-            checkVersionButton.setOnClickListener((v) -> {
-                ApiClient.checkAvailable();
-                apiVersionLabel.setText(apiServiceVersionTemplate.replace("{}", I18n.get(ApiClient.getVersion())));
-            });
-
-            apiVersionLinearLayout.addView(apiVersionLabel, new LayoutParams(MATCH_PARENT, WRAP_CONTENT, 1));
-            apiVersionLinearLayout.addView(checkVersionButton);
-            apiCategory.addView(apiVersionLinearLayout);
+            final TextView qqApiVersionLabel = createApiVersionRow(context, apiCategory, backgroundFactory,
+                    ApiProvider.QQ,
+                    MusicHud.MOD_ID + ".text.qqApiServiceVersion",
+                    MusicHud.MOD_ID + ".button.checkQqApiServerVersion");
 
             LinearLayout apiLogLayout = new LinearLayout(context);
             apiLogLayout.setOrientation(LinearLayout.HORIZONTAL);
@@ -711,7 +720,8 @@ public class ConfigView extends LinearLayout {
             Consumer<ApiServerManager.BinaryApiServerStatus> listener = (apiServerStatus) -> {
                 MuiModApi.postToUiThread(() -> {
                     apiStatusLabel.setText(binaryApiStatusTemplate.replace("{}", I18n.get(apiServerStatus.i18nKey())));
-                    apiVersionLabel.setText(apiServiceVersionTemplate.replace("{}", I18n.get(ApiClient.getVersion())));
+                    refreshApiVersionLabel(apiVersionLabel, ApiProvider.NCM, MusicHud.MOD_ID + ".text.apiServiceVersion");
+                    refreshApiVersionLabel(qqApiVersionLabel, ApiProvider.QQ, MusicHud.MOD_ID + ".text.qqApiServiceVersion");
                     updateApiLogLabel(apiLogLabel);
                 });
             };
@@ -735,6 +745,50 @@ public class ConfigView extends LinearLayout {
             instance = null;
             throw e;
         }
+    }
+
+    /**
+     * Builds one "API version: {0}" row with its own probe button and returns the value label so
+     * callers can refresh it later.
+     *
+     * <p>Each platform gets its own row because each owns an independent address and an independent
+     * reachability state: a QQ server can be up while the NetEase one is down, and vice versa.
+     */
+    private TextView createApiVersionRow(Context context, LinearLayout parent,
+                                         ButtonInsetBackgroundFactory backgroundFactory,
+                                         ApiProvider provider, String labelKey, String buttonKey) {
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.HORIZONTAL);
+        layout.setGravity(Gravity.LEFT);
+        layout.setVerticalGravity(Gravity.CENTER);
+        LayoutParams params = new LayoutParams(MATCH_PARENT, dp(44));
+        params.setMargins(dp(6), 0, dp(6), 0);
+        layout.setLayoutParams(params);
+
+        TextView versionLabel = new TextView(context);
+        versionLabel.setTextSize(14);
+        refreshApiVersionLabel(versionLabel, provider, labelKey);
+
+        Button checkButton = new Button(context);
+        checkButton.setText(I18n.get(buttonKey));
+        checkButton.setTextColor(Theme.PRIMARY_COLOR);
+        checkButton.setTextSize(14);
+        checkButton.setBackground(backgroundFactory.newBackgroundDrawable());
+        checkButton.setOnClickListener((v) -> {
+            ApiClient.checkAvailable(provider);
+            refreshApiVersionLabel(versionLabel, provider, labelKey);
+        });
+
+        layout.addView(versionLabel, new LayoutParams(MATCH_PARENT, WRAP_CONTENT, 1));
+        layout.addView(checkButton);
+        parent.addView(layout);
+        return versionLabel;
+    }
+
+    private static void refreshApiVersionLabel(TextView label, ApiProvider provider, String labelKey) {
+        String template = I18n.get(labelKey);
+        String version = ApiClient.getVersion(provider);
+        label.setText(template.replace("{}", I18n.get(version)));
     }
 
     private static void updateApiLogLabel(TextView label) {
@@ -782,12 +836,20 @@ public class ConfigView extends LinearLayout {
 
         TextView descriptionUrl = new TextView(context);
         String url = I18n.get(MusicHud.MOD_ID + ".modal.downloadApiServer.description.url");
-        int indexOfUrl = url.indexOf("{url}");
         String latestReleaseUrl = ApiServerFetcher.LATEST_RELEASE_URL;
+        // I18n.get returns the raw key when the translation is missing (e.g. resources failed to
+        // load), in which case "{url}" is absent and indexOf returns -1. Spanning [ -1, -1 + len )
+        // then throws IndexOutOfBoundsException on the ModernUI UI thread and kills the screen, so
+        // only span when the placeholder is actually there and fit within the text.
+        int indexOfUrl = url.indexOf("{url}");
         String replace = url.replace("{url}", latestReleaseUrl);
-        SpannableString spannableString = new SpannableString(replace);
-        spannableString.setSpan(new URLSpan(latestReleaseUrl), indexOfUrl, indexOfUrl + latestReleaseUrl.length(), SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
-        descriptionUrl.setText(spannableString);
+        if (indexOfUrl >= 0 && indexOfUrl + latestReleaseUrl.length() <= replace.length()) {
+            SpannableString spannableString = new SpannableString(replace);
+            spannableString.setSpan(new URLSpan(latestReleaseUrl), indexOfUrl, indexOfUrl + latestReleaseUrl.length(), SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE);
+            descriptionUrl.setText(spannableString);
+        } else {
+            descriptionUrl.setText(replace);
+        }
         descriptionUrl.setTextSize(Theme.TEXT_SIZE_NORMAL);
         descriptionUrl.setOnClickListener(v -> Util.getPlatform().openUri(latestReleaseUrl));
 

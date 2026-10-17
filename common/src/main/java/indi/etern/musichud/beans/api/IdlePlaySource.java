@@ -8,6 +8,7 @@ import indi.etern.musichud.network.ByteBufCodec;
 import indi.etern.musichud.network.Codecs;
 import indi.etern.musichud.server.api.ApiProvider;
 import indi.etern.musichud.server.api.IMusicApiService;
+import indi.etern.musichud.server.api.MusicIdRegistry;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -40,12 +41,16 @@ public final class IdlePlaySource {
 
     public void serverLoadMusicCollection(UUID playerUUID) {
         if (musicCollection == null) {
+            // The id was minted by whichever provider the collection came from; the server-side
+            // registry remembers which, and that provider's own identifier for it (QQ needs a MID).
+            ApiProvider provider = MusicIdRegistry.providerOf(id);
+            String externalId = MusicIdRegistry.externalIdOf(id);
             if (type.equals(Album.class)) {
                 dataLoaded = true;
-                musicCollection = IMusicApiService.getInstance(ApiProvider.NCM).getAlbumInfoDetail(id, playerUUID);
+                musicCollection = IMusicApiService.getInstance(provider).getAlbumInfoDetail(id, externalId, playerUUID);
             } else if (type.equals(Playlist.class)) {
                 dataLoaded = true;
-                musicCollection = IMusicApiService.getInstance(ApiProvider.NCM).getPlaylistDetail(id, playerUUID);
+                musicCollection = IMusicApiService.getInstance(provider).getPlaylistDetail(id, externalId, playerUUID);
             }
         }
     }

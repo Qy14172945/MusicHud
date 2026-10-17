@@ -15,6 +15,7 @@ import indi.etern.musichud.client.ui.utils.ButtonInsetBackgroundFactory;
 import indi.etern.musichud.network.IClientNetworkService;
 import indi.etern.musichud.network.payloads.requestResponseCycle.CancelQRLoginRequest;
 import indi.etern.musichud.network.payloads.requestResponseCycle.StartQRLoginRequest;
+import indi.etern.musichud.server.api.ApiProvider;
 import net.minecraft.client.resources.language.I18n;
 
 import static icyllis.modernui.view.ViewGroup.LayoutParams.WRAP_CONTENT;
@@ -24,15 +25,23 @@ public class QRLoginView extends LinearLayout implements ILoginView{
     private final UrlImageView urlImageView;
     private final TextView messageTextView;
     private static final IClientNetworkService clientNetworkService = IClientNetworkService.getInstance();
+    /**
+     * Both providers expose a QR login and the two sessions are independent, so the page states
+     * which platform it signs in to instead of following the search source selection.
+     */
+    private final ApiProvider provider;
 
-    public QRLoginView(Context context) {
+    public QRLoginView(Context context, ApiProvider provider) {
         super(context);
+        this.provider = provider == null ? ApiProvider.NCM : provider;
         setOrientation(LinearLayout.VERTICAL);
         setGravity(Gravity.CENTER_HORIZONTAL);
         TextView textView = new TextView(context);
         textView.setTextSize(Theme.TEXT_SIZE_LARGE);
         textView.setTextColor(Theme.EMPHASIZE_TEXT_COLOR);
-        textView.setText(I18n.get(MusicHud.MOD_ID + ".text.login.qrCode"));
+        textView.setText(I18n.get(MusicHud.MOD_ID + (this.provider == ApiProvider.QQ
+                ? ".text.login.qrCode.qq"
+                : ".text.login.qrCode")));
         textView.setLayoutParams(new LayoutParams(WRAP_CONTENT, WRAP_CONTENT));
         TextView textView1 = new TextView(context);
         textView1.setTextSize(Theme.TEXT_SIZE_NORMAL);
@@ -82,10 +91,12 @@ public class QRLoginView extends LinearLayout implements ILoginView{
             });
             LoginService.getInstance().setLoginResponseHandler((qrLoginResponse) -> {
                 MuiModApi.postToUiThread(() -> {
-                    urlImageView.loadUrl(qrLoginResponse.base64QRImg());
+                    if (qrLoginResponse.base64QRImg() != null && !qrLoginResponse.base64QRImg().isEmpty()) {
+                        urlImageView.loadUrl(qrLoginResponse.base64QRImg());
+                    }
                 });
             });
-            clientNetworkService.sendToServer(StartQRLoginRequest.REQUEST);
+            clientNetworkService.sendToServer(new StartQRLoginRequest(provider));
         });
 
         addView(textView);
@@ -101,7 +112,7 @@ public class QRLoginView extends LinearLayout implements ILoginView{
             @Override
             public void onViewDetachedFromWindow(View v) {
                 if (MusicHud.getConnectStatus() == MusicHud.ConnectStatus.CONNECTED) {
-                    clientNetworkService.sendToServer(CancelQRLoginRequest.REQUEST);
+                    clientNetworkService.sendToServer(new CancelQRLoginRequest(provider));
                 }
             }
         });

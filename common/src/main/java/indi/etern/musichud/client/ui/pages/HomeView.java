@@ -24,6 +24,7 @@ import indi.etern.musichud.client.ui.components.MusicListItem;
 import indi.etern.musichud.client.ui.components.StaggeredLyricScrollView;
 import indi.etern.musichud.client.ui.utils.ButtonInsetBackgroundFactory;
 import indi.etern.musichud.interfaces.ClientConfig;
+import indi.etern.musichud.server.api.ApiProvider;
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -53,6 +54,8 @@ public class HomeView extends LinearLayout {
     private TextView nextToPlayTitle;
     private TextView queueTitle;
     private LinearLayout playQueueListView;
+    private final java.util.List<MusicSourceButton> musicSourceButtons = new java.util.ArrayList<>();
+    private Button mergeSearchButton;
     private LinearLayout clientIdlePlaySourceView;
     private LinearLayout serverIdlePlaySourceView;
     private AutoFlowGridLayout clientIdlePlaySourceCardsList;
@@ -128,6 +131,8 @@ public class HomeView extends LinearLayout {
             queueView.setOrientation(VERTICAL);
             LayoutParams queueViewParams = new LayoutParams(0, MATCH_PARENT, 2);
             addView(queueView, queueViewParams);
+
+            queueView.addView(createMusicSourceSwitcher(context), new LayoutParams(MATCH_PARENT, WRAP_CONTENT));
 
             var scrollView = new ScrollView(context);
             scrollView.setScrollBarStyle(View.SCROLLBARS_INSIDE_INSET);
@@ -292,8 +297,96 @@ public class HomeView extends LinearLayout {
         }
     }
 
-    private void addIdlePlaySourceTo(MusicCollection idlePlaySource, Context context, AutoFlowGridLayout targetView) {
-        MusicCollectionCard child = new MusicCollectionCard(context, idlePlaySource);
+    /**
+     * Both platforms stay connected at the same time, so the search source is a first-class
+     * control on the home page instead of a hidden entry in the config screen.
+     */
+    private View createMusicSourceSwitcher(Context context) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LayoutParams rowParams = new LayoutParams(MATCH_PARENT, WRAP_CONTENT);
+        rowParams.setMargins(0, 0, 0, dp(8));
+        row.setLayoutParams(rowParams);
+
+        TextView label = new TextView(context);
+        label.setTextColor(Theme.SECONDARY_TEXT_COLOR);
+        label.setTextSize(Theme.TEXT_SIZE_NORMAL);
+        label.setText(I18n.get(MusicHud.MOD_ID + ".text.musicSource"));
+        LayoutParams labelParams = new LayoutParams(WRAP_CONTENT, WRAP_CONTENT);
+        labelParams.setMargins(0, 0, dp(8), 0);
+        row.addView(label, labelParams);
+
+        musicSourceButtons.clear();
+        for (ApiProvider provider : ApiProvider.availableProviders()) {
+            Button button = new Button(context);
+            button.setFocusable(true);
+            button.setClickable(true);
+            button.setTextSize(Theme.TEXT_SIZE_NORMAL);
+            button.setText(provider.toString());
+            button.setMinimumWidth(dp(72));
+            button.setHeight(dp(28));
+            button.setBackground(ButtonInsetBackgroundFactory.builder()
+                    .inset(dp(1))
+                    .padding(new ButtonInsetBackgroundFactory.Padding(dp(10), dp(2), dp(10), dp(2)))
+                    .cornerRadius(dp(4))
+                    .build().newBackgroundDrawable());
+            button.setOnClickListener(view -> {
+                clientConfig.setSelectedApiProvider(provider);
+                refreshMusicSourceButtons();
+            });
+            LayoutParams buttonParams = new LayoutParams(WRAP_CONTENT, WRAP_CONTENT);
+            buttonParams.setMargins(0, 0, dp(8), 0);
+            row.addView(button, buttonParams);
+            musicSourceButtons.add(new MusicSourceButton(provider, button));
+        }
+
+        // Merged search answers the query from both platforms at once, so the per-platform buttons
+        // above only matter when it is off. Keeping the toggle right next to them is what makes that
+        // relationship visible.
+        mergeSearchButton = new Button(context);
+        mergeSearchButton.setFocusable(true);
+        mergeSearchButton.setClickable(true);
+        mergeSearchButton.setTextSize(Theme.TEXT_SIZE_NORMAL);
+        mergeSearchButton.setMinimumWidth(dp(96));
+        mergeSearchButton.setHeight(dp(28));
+        mergeSearchButton.setBackground(ButtonInsetBackgroundFactory.builder()
+                .inset(dp(1))
+                .padding(new ButtonInsetBackgroundFactory.Padding(dp(10), dp(2), dp(10), dp(2)))
+                .cornerRadius(dp(4))
+                .build().newBackgroundDrawable());
+        mergeSearchButton.setOnClickListener(view -> {
+            clientConfig.setMergeSearchProviders(!clientConfig.getMergeSearchProviders());
+            refreshMusicSourceButtons();
+        });
+        LayoutParams mergeParams = new LayoutParams(WRAP_CONTENT, WRAP_CONTENT);
+        mergeParams.setMargins(dp(8), 0, 0, 0);
+        row.addView(mergeSearchButton, mergeParams);
+
+        refreshMusicSourceButtons();
+        return row;
+    }
+
+    private void refreshMusicSourceButtons() {
+        ApiProvider selected = clientConfig.getSelectedApiProvider();
+        for (MusicSourceButton entry : musicSourceButtons) {
+            entry.button().setTextColor(entry.provider() == selected
+                    ? Theme.PRIMARY_COLOR
+                    : Theme.SECONDARY_TEXT_COLOR);
+        }
+        if (mergeSearchButton != null) {
+            boolean merged = clientConfig.getMergeSearchProviders();
+            mergeSearchButton.setText(I18n.get(MusicHud.MOD_ID + (merged
+                    ? ".text.searchMode.merged"
+                    : ".text.searchMode.single")));
+            mergeSearchButton.setTextColor(merged ? Theme.PRIMARY_COLOR : Theme.SECONDARY_TEXT_COLOR);
+        }
+    }
+
+    private record MusicSourceButton(ApiProvider provider, Button button) {
+    }
+
+    private void addIdlePlaySourceTo(MusicCollection idlePlaySource, Context context, AutoFlowGridLayout targetView) {        MusicCollectionCard child = new MusicCollectionCard(context, idlePlaySource);
         targetView.addView(child);
         idlePlaySourceCardMap.put(idlePlaySource, child);
     }

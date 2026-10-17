@@ -1,7 +1,6 @@
 package indi.etern.musichud.mixin;
 
-import indi.etern.musichud.client.audio.StreamAudioPlayer;
-import indi.etern.musichud.interfaces.ClientConfig;
+import indi.etern.musichud.client.audio.VanillaMusicSuppressor;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Unique;
@@ -13,24 +12,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(targets = "circuitlord.reactivemusic.ReactiveMusic", remap = false)
 public abstract class ReactiveMusicCompatMixin {
     @Unique
-    private static StreamAudioPlayer music_hud$streamAudioPlayer;
-    @Unique
-    private static ClientConfig music_hud$clientConfig;
-    @Unique
     private static boolean music_hud$reactive_music_killed = false;
 
     @SuppressWarnings("UnresolvedMixinReference")
     @Inject(method = "newTick", at = @At("HEAD"), cancellable = true)
     private static void onNewTick(CallbackInfo ci) {
-        if (music_hud$streamAudioPlayer == null) {
-            music_hud$streamAudioPlayer = StreamAudioPlayer.getInstance();
-        }
-        if (music_hud$clientConfig == null) {
-            music_hud$clientConfig = ClientConfig.getInstance();
-        }
-        boolean shouldMute = music_hud$streamAudioPlayer.getStatus() == StreamAudioPlayer.Status.PLAYING
-                && music_hud$clientConfig.getDisableVanillaMusic();
-        if (!shouldMute) {
+        // Shares VanillaMusicSuppressor with the Vanilla hooks so a pack that ships Reactive Music
+        // and the plain music engine can never disagree about when MusicHud owns the music channel
+        // (the old local check only accepted Status.PLAYING, which let Reactive Music restart in the
+        // buffering/retrying gaps between tracks).
+        if (!VanillaMusicSuppressor.shouldSuppress()) {
             music_hud$reactive_music_killed = false;
             return;
         }

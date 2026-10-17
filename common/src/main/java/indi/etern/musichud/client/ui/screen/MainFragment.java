@@ -32,6 +32,7 @@ import indi.etern.musichud.client.ui.pages.search.SearchView;
 import indi.etern.musichud.client.ui.utils.ButtonInsetBackgroundFactory;
 import indi.etern.musichud.client.ui.utils.PlayerInfoUtil;
 import indi.etern.musichud.interfaces.ClientConfig;
+import indi.etern.musichud.server.api.ApiProvider;
 import lombok.NonNull;
 import lombok.Setter;
 import net.minecraft.client.Minecraft;
@@ -67,6 +68,7 @@ public class MainFragment extends Fragment {
     private final NowPlayingInfo playingInfo = NowPlayingInfo.getInstance();
     private UrlImageView albumImage;
     private TextView titleText;
+    private PlatformBadge platformBadge;
     private FlexWrapLayout artists;
     private LinearLayout albumContainer;
     private TextView pusherText;
@@ -108,6 +110,9 @@ public class MainFragment extends Fragment {
                 instance.albumImage.loadUrl(MusicHud.ICON_BASE64);
                 instance.titleText.setText(I18n.get(MusicHud.MOD_ID + ".text.idle"));
                 instance.titleText.setTextColor(Theme.SECONDARY_TEXT_COLOR);
+                if (instance.platformBadge != null) {
+                    instance.platformBadge.setVisibility(View.GONE);
+                }
                 instance.artists.removeAllViews();
                 instance.albumContainer.removeAllViews();
                 instance.pusherHeadView.setVisibility(View.GONE);
@@ -119,6 +124,10 @@ public class MainFragment extends Fragment {
                 instance.titleText.setTextColor(Theme.NORMAL_TEXT_COLOR);
                 instance.albumImage.loadUrl(musicDetail.getAlbum().getThumbnailPicUrl(240));
                 instance.titleText.setText(musicDetail.getName());
+                if (instance.platformBadge != null) {
+                    instance.platformBadge.setProvider(musicDetail.getProvider());
+                    instance.platformBadge.setVisibility(View.VISIBLE);
+                }
                 PlayerInfo pusherPlayerInfo = NowPlayingInfo.getInstance().getPusherPlayerInfo();
                 String name = pusherPlayerInfo != null ? pusherPlayerInfo.getProfile().getName() : null;
                 if (name == null || name.isEmpty()) {
@@ -296,6 +305,17 @@ public class MainFragment extends Fragment {
                 titleText.setTextColor(Theme.NORMAL_TEXT_COLOR);
                 instance.titleText.setText(I18n.get(MusicHud.MOD_ID + ".text.idle"));
                 musicInfo.addView(titleText);
+
+                // The now-playing card names the platform the track is being served from: the two
+                // providers are usable at the same time, so the source is not implied by anything
+                // else on this screen.
+                platformBadge = new PlatformBadge(context);
+                platformBadge.setProvider(ApiProvider.NCM);
+                platformBadge.setVisibility(View.GONE);
+                LinearLayout.LayoutParams platformBadgeParams =
+                        new LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT);
+                platformBadgeParams.setMargins(0, titleText.dp(2), 0, titleText.dp(2));
+                musicInfo.addView(platformBadge, platformBadgeParams);
 
                 artists = new FlexWrapLayout(context);
                 musicInfo.addView(artists);

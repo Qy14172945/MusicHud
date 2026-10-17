@@ -22,6 +22,15 @@ public interface ServerConfig {
 
     void setServerApiBaseUrl(String serverApiBaseUrl);
 
+    /**
+     * Base URL of the QQ Music API server. Unlike {@link #getServerApiBaseUrl()} this is a
+     * <em>separate</em> process/instance ({@code @sansenjian/qq-music-api}, Node.js, default port 3200),
+     * so it cannot share the NetEase endpoint.
+     */
+    String getQqApiBaseUrl();
+
+    void setQqApiBaseUrl(String qqApiBaseUrl);
+
     boolean getStartupBinaryApiServerWhenLaunch();
 
     void setStartupBinaryApiServerWhenLaunch(boolean startupBinaryApiServerWhenLaunch);

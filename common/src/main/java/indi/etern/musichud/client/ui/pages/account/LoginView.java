@@ -13,6 +13,7 @@ import icyllis.modernui.widget.PagerAdapter;
 import icyllis.modernui.widget.TabLayout;
 import icyllis.modernui.widget.ViewPager;
 import indi.etern.musichud.MusicHud;
+import indi.etern.musichud.server.api.ApiProvider;
 import lombok.Getter;
 import lombok.NonNull;
 import net.minecraft.client.resources.language.I18n;
@@ -25,7 +26,7 @@ public class LoginView extends FrameLayout implements ILoginView{
     private static LoginView instance;
     @Getter
     private final ViewPager pager;
-    private final ILoginView[] loginViews = new ILoginView[2];
+    private final ILoginView[] loginViews = new ILoginView[3];
 
     public LoginView(Context context) {
         super(context);
@@ -92,7 +93,7 @@ public class LoginView extends FrameLayout implements ILoginView{
     private class Adapter extends PagerAdapter {
         @Override
         public int getCount() {
-            return 2;
+            return 3;
         }
 
         @NonNull
@@ -104,10 +105,13 @@ public class LoginView extends FrameLayout implements ILoginView{
 
             container.addView(sv);
 
+            // Both platforms are always available: NetEase offers QR plus device-code login,
+            // QQ only offers QR (its API has no phone/email login endpoints at all).
             ILoginView layout = switch (position) {
-                case 0 -> new QRLoginView(context);
+                case 0 -> new QRLoginView(context, ApiProvider.NCM);
                 case 1 -> new PhoneCodeLoginView(context);
-                default -> new QRLoginView(context);
+                case 2 -> new QRLoginView(context, ApiProvider.QQ);
+                default -> new QRLoginView(context, ApiProvider.NCM);
             };
             loginViews[position] = layout;
 
@@ -134,6 +138,7 @@ public class LoginView extends FrameLayout implements ILoginView{
             return I18n.get(switch (position) {
                 case 0 -> MusicHud.MOD_ID + ".text.login.page.qrCode";
                 case 1 -> MusicHud.MOD_ID + ".text.login.page.deviceCode";
+                case 2 -> MusicHud.MOD_ID + ".text.login.page.qq";
                 default -> "";
             });
         }

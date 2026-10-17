@@ -11,9 +11,9 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.config.Configurator;
 
 import java.time.Duration;
-import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -30,7 +30,7 @@ public final class MusicHud {
     @Getter
     private static ConnectStatus connectStatus = ConnectStatus.NOT_CONNECTED;
     @Getter
-    private static final Set<Consumer<ConnectStatus>> connectStatusListeners = new HashSet<>();
+    private static final Set<Consumer<ConnectStatus>> connectStatusListeners = new CopyOnWriteArraySet<>();
     @Getter
     @Setter
     private static Environment currentEnvironment;
@@ -66,7 +66,7 @@ public final class MusicHud {
     }
 
     public static ResourceLocation location(String s) {
-        return ResourceLocation.fromNamespaceAndPath(MusicHud.MOD_ID, s);
+        return new ResourceLocation(MusicHud.MOD_ID, s);
     }
 
     public enum ConnectStatus {

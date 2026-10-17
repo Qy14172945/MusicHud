@@ -95,7 +95,7 @@ public class Modal {
             TypedValue tv = new TypedValue();
             var theme = context.getTheme();
             if (theme.resolveAttribute(R.ns, R.attr.colorOnSurface, tv, true)) {
-                titleView.setTextColor(theme.getResources().loadColorStateList(tv, null, theme));
+                titleView.setTextColor(theme.getResources().loadColorStateList(tv, theme));
             } else {
                 titleView.setTextColor(0xFFFFFFFF);
             }
@@ -115,7 +115,7 @@ public class Modal {
         TypedValue dividerTv = new TypedValue();
         var theme = context.getTheme();
         if (theme.resolveAttribute(R.ns, R.attr.colorOutlineVariant, dividerTv, true)) {
-            dividerBg.setColor(theme.getResources().loadColorStateList(dividerTv, null, theme));
+            dividerBg.setColor(theme.getResources().loadColorStateList(dividerTv, theme));
         } else {
             dividerBg.setColor(0xFF3E3E42);
         }
@@ -142,7 +142,7 @@ public class Modal {
             button.setText(buttonMeta.getText());
             TypedValue btnTv = new TypedValue();
             if (context.getTheme().resolveAttribute(R.ns, R.attr.colorOnSurface, btnTv, true)) {
-                button.setTextColor(context.getTheme().getResources().loadColorStateList(btnTv, null, context.getTheme()));
+                button.setTextColor(context.getTheme().getResources().loadColorStateList(btnTv, context.getTheme()));
             } else {
                 button.setTextColor(0xFFFFFFFF);
             }
@@ -181,7 +181,7 @@ public class Modal {
         TypedValue value = new TypedValue();
         var theme = context.getTheme();
         if (theme.resolveAttribute(R.ns, R.attr.colorSurface, value, true)) {
-            bg.setColor(theme.getResources().loadColorStateList(value, null, theme));
+            bg.setColor(theme.getResources().loadColorStateList(value, theme));
         } else {
             bg.setColor(0xFF2D2D30);
         }

@@ -21,6 +21,13 @@ configurations {
     shadowBundle {
         canBeResolved = true
         canBeConsumed = false
+
+        // See forge/build.gradle for the full explanation: slf4j-api's `Multi-Release: true`
+        // manifest attribute is merged into the fat jar while its META-INF/versions/9 entry is
+        // dropped by `exclude 'org/slf4j/**'`, producing a malformed multi-release jar. Forge's
+        // SecureJar walks the missing META-INF/versions path and aborts the launch. The loader
+        // provides slf4j anyway, so keep it out of the bundle on both platforms.
+        exclude group: 'org.slf4j', module: 'slf4j-api'
     }
 }
 
@@ -43,7 +50,7 @@ dependencies {
     modImplementation "com.terraformersmc:modmenu:$rootProject.modmenu_version"
 
     // ModernUI Fabric
-    modImplementation("icyllis.modernui:ModernUI-Fabric:1.21.1-${rootProject.modernui_version}.+")
+    modImplementation("icyllis.modernui:ModernUI-Fabric:1.20.1-${rootProject.modernui_version}.1")
 
     implementation "com.github.umjammer:jlayer:$rootProject.jlayer_version"
     shadowBundle "com.github.umjammer:jlayer:$rootProject.jlayer_version"
@@ -51,8 +58,6 @@ dependencies {
     implementation "org.jflac:jflac-codec:$rootProject.jflac_version"
     shadowBundle "org.jflac:jflac-codec:$rootProject.jflac_version"
 
-//    implementation "io.github.selemba1000:JavaMediaTransportControls:$rootProject.jmtc_version"
-//    shadowBundle "io.github.selemba1000:JavaMediaTransportControls:$rootProject.jmtc_version"
     implementation "com.github.hypfvieh:dbus-java-core:$rootProject.dbus_version"
     shadowBundle "com.github.hypfvieh:dbus-java-core:$rootProject.dbus_version"
     implementation "com.github.hypfvieh:dbus-java-transport-native-unixsocket:$rootProject.dbus_version"
@@ -71,6 +76,20 @@ shadowJar {
     configurations = [project.configurations.shadowBundle]
     archiveClassifier = 'dev-shadow'
     exclude 'org/slf4j/**'
+
+    // Bundle jlayer under a private package. See forge/build.gradle for the full story: on Forge
+    // every mod jar becomes a JPMS automatic module, and a pack that already bundles jlayer via
+    // JarJar aborts the launch with
+    //   ResolutionException: Modules music_hud and jlayer export package javazoom.jl.converter
+    // Relocating keeps the MP3 decoder an implementation detail on both loaders, and also stops
+    // our copy from shadowing another Fabric mod's jlayer on the shared classpath.
+    relocate 'javazoom', 'indi.etern.musichud.shaded.javazoom'
+    // `relocate` does not rewrite SPI registration files. On Forge the stale
+    // `META-INF/services/javazoom.jl.player.AudioDeviceFactory` still declares a provider in the
+    // original package, which makes the module keep claiming `javazoom.jl.player` and collide
+    // with a JarJar-nested jlayer elsewhere in the pack. The `player` package is unused (only
+    // `javazoom.jl.decoder` is), so drop it here too and keep both loaders byte-identical.
+    exclude 'META-INF/services/javazoom.jl.player.AudioDeviceFactory'
 }
 
 remapJar {

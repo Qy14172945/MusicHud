@@ -10,6 +10,9 @@ import indi.etern.musichud.server.api.ApiProvider;
 import indi.etern.musichud.server.api.ILoginApiService;
 import indi.etern.musichud.utils.ServerDataPacketVThreadExecutor;
 
+/**
+ * Phone + password login. NetEase-only: QQ Music's API surface exposes no password login endpoint.
+ */
 public record PhonePasswordLoginRequest(long phone, String md5password) implements C2SPayload {
     public static final ByteBufCodec<PhonePasswordLoginRequest> CODEC =
             ByteBufCodec.composite(

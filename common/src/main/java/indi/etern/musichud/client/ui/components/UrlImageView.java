@@ -220,6 +220,16 @@ public class UrlImageView extends FrameLayout {
      */
     public void loadUrl(String urlString) {
         cancelLoad();
+        if (urlString == null || urlString.isBlank()
+                || (!urlString.startsWith("data:") && !urlString.contains("://"))) {
+            // Entities without artwork hand over an empty URL; showing the placeholder is better
+            // than logging "URI is not absolute" once per rendered row.
+            currentURLString = null;
+            pendingUrl = null;
+            hasLoadedImage = false;
+            clear();
+            return;
+        }
         currentURLString = urlString;
         pendingUrl = urlString;
         hasLoadedImage = false;

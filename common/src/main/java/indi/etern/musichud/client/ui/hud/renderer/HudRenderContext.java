@@ -52,11 +52,17 @@ public class HudRenderContext {
             return;
         }
 
-        // Save MC's GL state before we take over
-        int[] savedProgram = new int[1];
-        glGetIntegerv(GL_CURRENT_PROGRAM, savedProgram);
-        int[] savedActiveTexture = new int[1];
-        glGetIntegerv(GL_ACTIVE_TEXTURE, savedActiveTexture);
+        // Save MC's GL state before we take over.
+        //
+        // Every mutation below goes through GlStateManager rather than raw GL. GlStateManager
+        // keeps a shadow cache of the program, per-texture-unit bindings and the depth/blend
+        // toggles, and _bindTexture() skips the GL call when the cache already matches. Raw
+        // glBindTexture() would update the driver but NOT that cache, so after this method
+        // returned the cache still claimed vanilla's texture was bound while the driver still
+        // had ours - every subsequent vanilla draw that relied on the cached binding was skipped
+        // and rendered with the HUD's texture. That is a whole-UI flash, not a localised glitch.
+        int savedProgram = GlStateManager._getInteger(GL_CURRENT_PROGRAM);
+        int savedActiveTexture = GlStateManager._getInteger(GL_ACTIVE_TEXTURE);
         boolean depthEnabled = glIsEnabled(GL_DEPTH_TEST);
         boolean blendEnabled = glIsEnabled(GL_BLEND);
         int[] savedBlendSrcRgb = new int[1], savedBlendDstRgb = new int[1];
@@ -68,10 +74,13 @@ public class HudRenderContext {
             glGetIntegerv(GL_BLEND_DST_ALPHA, savedBlendDstAlpha);
         }
 
+        // Per-unit bindings we are about to replace, so each one can be put back exactly.
+        Map<Integer, Integer> savedUnitBindings = new HashMap<>();
+
         try {
-            glUseProgram(program.getProgramId());
-            if (depthEnabled) glDisable(GL_DEPTH_TEST);
-            if (!blendEnabled) glEnable(GL_BLEND);
+            GlStateManager._glUseProgram(program.getProgramId());
+            if (depthEnabled) GlStateManager._disableDepthTest();
+            if (!blendEnabled) GlStateManager._enableBlend();
             GlStateManager._blendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
             setBuiltinUniforms(program);
@@ -87,8 +96,9 @@ public class HudRenderContext {
             if (textures != null) {
                 for (int i = 0; i < textures.length; i++) {
                     if (textures[i] != null) {
-                        glActiveTexture(GL_TEXTURE0 + i);
-                        glBindTexture(GL_TEXTURE_2D, textures[i]);
+                        GlStateManager._activeTexture(GL_TEXTURE0 + i);
+                        savedUnitBindings.put(i, GlStateManager._getInteger(GL_TEXTURE_BINDING_2D));
+                        GlStateManager._bindTexture(textures[i]);
                         int samplerLoc = program.getUniformOrSamplerLocation("Sampler" + i);
                         if (samplerLoc >= 0) {
                             glUniform1i(samplerLoc, i);
@@ -99,16 +109,23 @@ public class HudRenderContext {
 
             drawQuad(hudRenderState.pose(), hudRenderState.width(), hudRenderState.height());
         } finally {
-            glUseProgram(savedProgram[0]);
-            glActiveTexture(savedActiveTexture[0]);
+            // Restore through GlStateManager so its shadow cache stays truthful too: raw GL here
+            // would leave the cache pointing at our program/textures and silently skip the next
+            // vanilla bind, which is exactly the cross-frame corruption this block prevents.
+            for (Map.Entry<Integer, Integer> entry : savedUnitBindings.entrySet()) {
+                GlStateManager._activeTexture(GL_TEXTURE0 + entry.getKey());
+                GlStateManager._bindTexture(entry.getValue());
+            }
+            GlStateManager._activeTexture(savedActiveTexture);
+            GlStateManager._glUseProgram(savedProgram);
             if (blendEnabled) {
                 GlStateManager._blendFuncSeparate(
                         savedBlendSrcRgb[0], savedBlendDstRgb[0],
                         savedBlendSrcAlpha[0], savedBlendDstAlpha[0]);
             } else {
-                glDisable(GL_BLEND);
+                GlStateManager._disableBlend();
             }
-            if (depthEnabled) glEnable(GL_DEPTH_TEST);
+            if (depthEnabled) GlStateManager._enableDepthTest();
         }
     }
 
@@ -169,7 +186,10 @@ public class HudRenderContext {
         float top = -height / 2f;
         float bottom = height / 2f;
 
-        BufferBuilder builder = Tesselator.getInstance().begin(VertexFormat.Mode.TRIANGLES, DefaultVertexFormat.POSITION_COLOR);
+        // Minecraft 1.20.1 vertex pipeline: a shared BufferBuilder is obtained from the
+        // Tesselator and must be begun explicitly with the vertex format.
+        BufferBuilder builder = Tesselator.getInstance().getBuilder();
+        builder.begin(VertexFormat.Mode.TRIANGLES, DefaultVertexFormat.POSITION_COLOR);
 
         float x1 = pose.m00 * left + pose.m10 * bottom;
         float y1 = pose.m01 * left + pose.m11 * bottom;
@@ -183,16 +203,20 @@ public class HudRenderContext {
         // Use identity matrix — u_Translation UBO handles element position,
         // ProjMat * ModelViewMat in the shader handles orthographic projection.
         // Do NOT apply graphics.pose() here to avoid double-transforming.
-        builder.addVertex(IDENTITY, x1, y1, 0).setColor(-1);
-        builder.addVertex(IDENTITY, x2, y2, 0).setColor(-1);
-        builder.addVertex(IDENTITY, x3, y3, 0).setColor(-1);
-        builder.addVertex(IDENTITY, x1, y1, 0).setColor(-1);
-        builder.addVertex(IDENTITY, x3, y3, 0).setColor(-1);
-        builder.addVertex(IDENTITY, x4, y4, 0).setColor(-1);
+        // 1.20.1 uses vertex(...).color(...).endVertex() instead of addVertex(...).setColor(...).
+        builder.vertex(IDENTITY, x1, y1, 0).color(-1).endVertex();
+        builder.vertex(IDENTITY, x2, y2, 0).color(-1).endVertex();
+        builder.vertex(IDENTITY, x3, y3, 0).color(-1).endVertex();
+        builder.vertex(IDENTITY, x1, y1, 0).color(-1).endVertex();
+        builder.vertex(IDENTITY, x3, y3, 0).color(-1).endVertex();
+        builder.vertex(IDENTITY, x4, y4, 0).color(-1).endVertex();
 
         // BufferUploader.draw() uploads + draws without touching the shader —
         // our glUseProgram() sticks.
-        BufferUploader.draw(builder.buildOrThrow());
+        BufferBuilder.RenderedBuffer rendered = builder.endOrDiscardIfEmpty();
+        if (rendered != null) {
+            BufferUploader.draw(rendered);
+        }
     }
 
     /**

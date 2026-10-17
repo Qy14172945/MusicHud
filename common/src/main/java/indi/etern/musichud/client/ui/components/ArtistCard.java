@@ -17,6 +17,7 @@ public class ArtistCard extends LinearLayout {
     private TextView artistName;
     private TextView musicCounts;
     private TextView albumCounts;
+    private PlatformBadge platformBadge;
     private Artist artist;
 
     public ArtistCard(Context context) {
@@ -44,6 +45,12 @@ public class ArtistCard extends LinearLayout {
         artistName.setTextColor(Theme.NORMAL_TEXT_COLOR);
         artistName.setTextAlignment(TEXT_ALIGNMENT_CENTER);
         texts.addView(artistName);
+
+        platformBadge = new PlatformBadge(context);
+        LayoutParams badgeParams = new LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        badgeParams.gravity = Gravity.CENTER_HORIZONTAL;
+        badgeParams.setMargins(0, dp(2), 0, dp(2));
+        texts.addView(platformBadge, badgeParams);
 
         albumCounts = new TextView(context);
         albumCounts.setTextSize(Theme.TEXT_SIZE_NORMAL);
@@ -77,6 +84,7 @@ public class ArtistCard extends LinearLayout {
     public void bindData(Artist artist) {
         albumImage.loadUrl(artist.getAvatarThumbnailUrl(dp(imageSize)));
         artistName.setText(artist.getName());
+        platformBadge.setProvider(artist.getProvider());
         int musicCount = artist.getMusicCount();
         if (musicCount > 0) {
             musicCounts.setText(I18n.get(MusicHud.MOD_ID + ".text.artist.music").replace("{}", String.valueOf(musicCount)));

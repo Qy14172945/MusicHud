@@ -103,9 +103,25 @@ public class MusicHudScreen extends Screen implements MuiScreen {
         if (callback == null || callback.hasDefaultBackground()) {
             BlurHandler.INSTANCE.drawScreenBackground(gr, 0, 0, this.width, this.height);
             float progress = Math.clamp((float) MuiModApi.getElapsedTime() / FADE_IN_DURATION_MILLIS, 0, 1);
-            gr.fill(0, 0, this.width, this.height, Color.argb((int) (progress * darken * 255), 0, 0, 0));//additional darken
+            int darkenAlpha = (int) (progress * darken * 255);
+            if (darkenAlpha > 0) {
+                //additional darken; skipped entirely at alpha 0 so a fill quad is not
+                //emitted into the deferred GuiGraphics buffer for nothing
+                gr.fill(0, 0, this.width, this.height, Color.argb(darkenAlpha, 0, 0, 0));
+            }
         }
         super.render(gr, mouseX, mouseY, deltaTick);
+        // UIManager.render() below takes over the GL pipeline with raw GL calls and
+        // submits its own geometry directly, and it force-resets the Blaze3D state it
+        // relies on. Anything of ours still queued in the shared GuiGraphics buffer
+        // would therefore be flushed at a later, framebuffer-inconsistent moment
+        // (either at the end of the frame, on top of the UI, or at the start of the
+        // next frame's blur pass, underneath it) - which is exactly the world
+        // background flicker plus stale pixel ghosting seen while the mouse moves and
+        // the UI surface is re-recorded. Commit our own geometry first so the order is
+        // strictly world -> blur -> darken -> UI, as Modern UI's own SimpleScreen does
+        // (BlurHandler.drawScreenBackground flushes internally, the darken quad did not).
+        gr.flush();
         mHost.render(gr, mouseX, mouseY, deltaTick);
     }
 

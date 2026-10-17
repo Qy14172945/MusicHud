@@ -108,6 +108,16 @@ You can find "Download API..." button in setting page, which will open a downloa
 1. Deploy NetEase Cloud Music API Enhanced (https://github.com/neteasecloudmusicapienhanced/api-enhanced).
 2. If not using the default port (3000) of NCM API Enhanced or deploying on another server, modify the `serverApiBaseUrl` property in the config file `/config/music_hud-server.toml`.
 
+#### QQ Music API (optional, separate from the NetEase API)
+QQ Music support needs **its own** API server, which is a **separate Node.js process** and is **not** managed by MusicHUD - you have to run it yourself (there is no prebuilt binary).
+
+> Note: this backport adds the QQ Music provider. It is not a drop-in for the NetEase endpoints - login is QR-code only, and there is no per-word lyric, no scrobble and no search-by-content-type support.
+
+- **Repository / self-hosting instructions:** https://github.com/sansenjian/qq-music-api
+- Requirements: **Node.js >= 20.17** (or Docker).
+- Default port: **3200** (`http://localhost:3200`).
+- If you change the port or deploy it on another machine, modify the `qqApiBaseUrl` property in `/config/music_hud-server.toml` (or set it in the in-game config screen).
+
 ---
 ## CN version description
 
@@ -210,3 +220,13 @@ You can find "Download API..." button in setting page, which will open a downloa
 #### 独立部署（推荐服务端使用）
 1. 部署 Netease Cloud Music API Enhanced (https://github.com/neteasecloudmusicapienhanced/api-enhanced)
 2. 如果不使用 NCM API Enhanced 的默认端口 ( 3000 ) 或在其他服务器上部署，需要修改配置文件`/config/music_hud-server.toml`的 `serverApiBaseUrl` 属性
+
+#### QQ 音乐 API（可选，与网易云 API 相互独立）
+QQ 音乐支持需要**另外单独**部署一个 API 服务器，它是一个**独立的 Node.js 进程**，**不由 MusicHUD 托管**，需要你自行运行（官方没有提供预编译二进制）。
+
+> 注意：QQ 音乐是移植版新增的音乐平台支持，它的接口与网易云并不通用 —— 只支持扫码登录，且没有逐字歌词、没有 scrobble（听歌记录上报）、搜索也没有按内容类型过滤的参数。
+
+- **仓库地址 / 自建说明：** https://github.com/sansenjian/qq-music-api
+- 环境要求：**Node.js >= 20.17**（或使用 Docker）
+- 默认端口：**3200**（`http://localhost:3200`）
+- 如果改过端口或部署在其它机器上，需要修改 `/config/music_hud-server.toml` 中的 `qqApiBaseUrl` 属性（也可以在游戏内配置界面里改）

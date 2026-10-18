@@ -27,10 +27,13 @@ configure(subprojects) {
     repositories {
         mavenLocal()
         maven {
-            // raw.githubusercontent.com is unreachable on this network (connection reset),
-            // so the Fuzs Mod Resources repository is consumed through the ghproxy mirror.
+            // raw.githubusercontent.com is unreachable on the author's network (connection
+            // reset), so the Fuzs Mod Resources repository is consumed through the ghproxy
+            // mirror there. CI runs the other way round: it can reach GitHub directly, so the
+            // workflow sets MUSICHUD_FUZS_REPO to the canonical URL.
             name = "Fuzs Mod Resources"
-            url = "https://ghproxy.net/https://raw.githubusercontent.com/Fuzss/modresources/main/maven/"
+            url = System.getenv("MUSICHUD_FUZS_REPO") ?:
+                    "https://ghproxy.net/https://raw.githubusercontent.com/Fuzss/modresources/main/maven/"
         }
         maven {
             name = "Terraformers"

@@ -1,67 +1,80 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-# This workflow will build a Java project with Gradle and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-gradle
+# Builds both loader jars (Fabric + Forge) on every push and pull request to the
+# 1.20.1-forge branch.
+#
+# Notes specific to this project:
+# - It must run on JDK 21. The build sets `options.release = 21` and the mod uses
+#   virtual threads, so the JDK 17 that GitHub's default Java workflow template
+#   picks fails with `invalid source release: 21`.
+# - `./gradlew build` is NOT enough: the root project has no aggregation build task
+#   for the loaders, so the jar-producing tasks have to be named explicitly.
+# - Tests are disabled in common/build.gradle and call the live NetEase API, so
+#   they are not part of CI.
 
-name: Java CI with Gradle
+name: Build
 
 on:
   push:
-    branches: [ "1.20.1-forge" ]
+    branches: ["1.20.1-forge"]
   pull_request:
-    branches: [ "1.20.1-forge" ]
+    branches: ["1.20.1-forge"]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     permissions:
       contents: read
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - uses: actions/checkout@v4
 
-    # Configure Gradle for optimal use in GitHub Actions, including caching of downloaded dependencies.
-    # See: https://github.com/gradle/actions/blob/main/setup-gradle/README.md
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
 
-    - name: Build with Gradle Wrapper
-      run: ./gradlew build
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-    # NOTE: The Gradle Wrapper is the default and recommended way to run Gradle (https://docs.gradle.org/current/userguide/gradle_wrapper.html).
-    # If your project does not have the Gradle Wrapper configured, you can use the following configuration to run Gradle with a specified version.
-    #
-    # - name: Setup Gradle
-    #   uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
-    #   with:
-    #     gradle-version: '8.9'
-    #
-    # - name: Build with Gradle 8.9
-    #   run: gradle build
+      - name: Build Fabric + Forge jars
+        run: ./gradlew --no-daemon --console=plain :fabric:build :forge:build
+        env:
+          # build.gradle defaults this to a ghproxy.net mirror because raw.githubusercontent.com
+          # is unreachable from the author's machine. CI can reach it directly, and the mirror
+          # would only add a third-party dependency to the build.
+          MUSICHUD_FUZS_REPO: https://raw.githubusercontent.com/Fuzss/modresources/main/maven/
+
+      - name: Upload jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: music_hud-1.20.1
+          path: |
+            fabric/build/libs/music_hud-fabric-*.jar
+            forge/build/libs/music_hud-forge-*.jar
+            !fabric/build/libs/*-dev-shadow.jar
+            !fabric/build/libs/*-sources.jar
+            !forge/build/libs/*-dev-shadow.jar
+            !forge/build/libs/*-sources.jar
+          # Only the remapped jars are downloads; -dev-shadow and -sources are intermediates.
+          if-no-files-found: error
 
   dependency-submission:
-
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      # Same reason as the build job: resolve Fuzs Mod Resources directly instead of via the
+      # ghproxy.net mirror that build.gradle falls back to for the author's network.
+      MUSICHUD_FUZS_REPO: https://raw.githubusercontent.com/Fuzss/modresources/main/maven/
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - uses: actions/checkout@v4
 
-    # Generates and submits a dependency graph, enabling Dependabot Alerts for all project dependencies.
-    # See: https://github.com/gradle/actions/blob/main/dependency-submission/README.md
-    - name: Generate and submit dependency graph
-      uses: gradle/actions/dependency-submission@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Generate and submit dependency graph
+        uses: gradle/actions/dependency-submission@v4

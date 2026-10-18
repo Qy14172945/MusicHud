@@ -6,8 +6,12 @@ import org.jetbrains.annotations.NotNull;
 
 public record Version(long mayor, long minor, long patch, BuildType build) implements Comparable<Version>{
     public static final ByteBufCodec<Version> PACKET_CODEC;
-    public static final Version current = new Version(1,2,16, BuildType.Stable);
-    public static final Version leastCapable = new Version(1,2,2,BuildType.Stable);
+    // This is an independent project: version numbering restarted at 0.1.0 and no longer
+    // follows the upstream MusicHud sequence. leastCapable is the protocol floor checked by
+    // compatibleWith(...), so it has to move together with current - leaving it at the old
+    // 1.2.2 would make this build refuse to talk to itself.
+    public static final Version current = new Version(0,1,0, BuildType.Stable);
+    public static final Version leastCapable = new Version(0,1,0,BuildType.Stable);
 
     static {
         PACKET_CODEC = new ByteBufCodec<>() {

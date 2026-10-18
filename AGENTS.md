@@ -2,7 +2,9 @@
 
 Multi-loader Minecraft mod (Fabric + Forge via Architectury) for **MC 1.20.1 / Java 21**. A GUI-based full-server song request system with a pluggable music backend: **NetEase Cloud Music (NCM)** and **QQ Music**.
 
-> Branch note: this is the `1.20.1-forge` branch. The `1.21.8`/`1.21.1` branches have a different module layout (they add `core/` + `processor/`, and target NeoForge/Paper). Do not carry their build commands over.
+> Branch note: this is the `1.20.1-forge` branch, and it is the **only** branch built from this working tree. The repo also carries 1.21.x branches with a different module layout (they add `core/` + `processor/`, and target NeoForge/Paper). Do not carry their build commands over.
+>
+> Project note: this repository is an **independent** project (a 1.20.1 backport that diverged from the original MusicHud). It has one remote, `origin` = `Qy14172945/MusicHud`; the original author's repository is **not** a remote and must never receive issues or PRs. Version numbering restarted at **`0.1.0`** and no longer follows upstream's `1.2.x` sequence — `gradle.properties` `mod_version` and `Version.current` are bumped together.
 
 ## Build & Run
 
@@ -120,3 +122,17 @@ These are hard-won and still accurate for the shared `common/` rendering code.
 - `ByteBuffer` allocations are cached per UBO name to avoid per-frame allocation.
 - `BufferUploader.draw(rendered)` uploads + draws without touching the shader — safe alongside a custom `glUseProgram`. Call `builder.endOrDiscardIfEmpty()` and null-check before drawing.
 - 1.20.1 `BufferBuilder` has **no** `addVertex(Matrix4f,...)` and **no** `buildOrThrow()`; use `builder.begin(Mode, Format)`, `builder.vertex(Matrix4f,x,y,z).color(-1).endVertex()`, `builder.endOrDiscardIfEmpty()`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues on `Qy14172945/MusicHud`, this project's only remote (`origin`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles use their default names (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), plus the `wayfinder:*` family. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+single-context — one root `GLOSSARY.md` plus `docs/adr/`; the loader modules share one vocabulary and get no per-module glossary. See `docs/agents/domain.md`.

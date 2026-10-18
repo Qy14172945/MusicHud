@@ -11,8 +11,7 @@ import indi.etern.musichud.server.api.impl.ncm.MusicApiService;
 import indi.etern.musichud.utils.JsonUtil;
 import io.netty.buffer.Unpooled;
 import lombok.SneakyThrows;
-import net.minecraft.core.RegistryAccess;
-import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Test;
 
@@ -51,13 +50,21 @@ public class MainTest {
         LOGGER.info("test get playlist detail");
         Playlist detailByIds = musicApiService.getPlaylistDetail(975427390, null);
         LOGGER.info(JsonUtil.gson.toJson(detailByIds));
-        RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+        // RegistryFriendlyByteBuf does not exist in 1.20.1 - it was added in 1.20.4 - so the
+        // codec is exercised against a plain FriendlyByteBuf (which only extends ByteBuf).
+        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
         Playlist.CODEC.encode(buf, detailByIds);
     }
 
     @SneakyThrows
     @Test
     public void testVersion() {
-        assert Version.compatibleWith(new Version(1, 1, 0, Version.BuildType.Alpha));
+        // leastCapable is 0.1.0 in this project (numbering restarted away from upstream's
+        // 1.2.x sequence), so anything at or above 0.1.0 - including these - must stay
+        // compatible.
+        assert Version.compatibleWith(new Version(0, 1, 0, Version.BuildType.Alpha));
+        assert Version.compatibleWith(new Version(0, 1, 0, Version.BuildType.Stable));
+        assert Version.compatibleWith(new Version(1, 2, 16, Version.BuildType.Stable));
+        assert !Version.compatibleWith(new Version(0, 0, 9, Version.BuildType.Stable));
     }
 }

@@ -1,19 +1,19 @@
-> ## ⚠️ This is a FORK — read this first / 请注意：这是移植分支
+> ## ⚠️ This is an INDEPENDENT project — read this first / 请注意：这是独立项目
 >
-> **This repository is NOT the original MusicHud.** It is a community backport of the original mod to **Minecraft 1.20.1 (Forge + Fabric)**, maintained specifically for the **DeceasedCraft (亡者世界)** modpack. The upstream project targets 1.21.x / NeoForge and is maintained by its original author.
+> **This repository is NOT the original MusicHud.** It started as a community backport of the original mod to **Minecraft 1.20.1 (Forge + Fabric)**, and is now developed **independently** — it no longer tracks the upstream project, and its version numbering was restarted at `0.1.0`. The upstream project targets 1.21.x / NeoForge and is maintained by its original author.
 >
 > - **Upstream / 原作者仓库:** https://github.com/Ephern/MusicHud — [Modrinth](https://modrinth.com/mod/music-hud) · [CurseForge](https://www.curseforge.com/minecraft/mc-mods/music-hud)
-> - **This fork / 本分支:** https://github.com/Qy14172945/MusicHud (branch `1.20.1-forge`)
+> - **This project / 本项目:** https://github.com/Qy14172945/MusicHud (branch `1.20.1-forge`)
 >
-> 🚫 **DO NOT report any bug, crash or compatibility issue of THIS build to the original author.** Anything you hit here is a backport artifact, not an upstream defect. Report it in this fork's [Issues](https://github.com/Qy14172945/MusicHud/issues) instead.
+> 🚫 **DO NOT report any bug, crash or compatibility issue of THIS build to the original author, and do not open pull requests against the upstream repository.** This is a separate, independent codebase now; upstream is only referenced for attribution. Report anything you hit in this project's [Issues](https://github.com/Qy14172945/MusicHud/issues) instead.
 >
-> 🚫 **本版本出现的任何 bug 都请勿向原作者反馈。** 本分支是 1.20.1 移植版，出现的问题基本来自移植与适配，与原作者无关。请到[本仓库的 Issues](https://github.com/Qy14172945/MusicHud/issues) 反馈。
+> 🚫 **本版本出现的任何 bug 都请勿向原作者反馈，也请不要向上游仓库提交 PR。** 本仓库现已是独立维护的代码库，上游仅作为出处说明。请到[本仓库的 Issues](https://github.com/Qy14172945/MusicHud/issues) 反馈。
 >
-> **Scope of this backport / 本移植分支的定位**
+> **Scope of this project / 本项目的定位**
 > - Targets **Minecraft 1.20.1 only** (Forge 47.1.37 + Fabric 0.16.10). It does **not** work on 1.21.x, and the 1.21.x branches of this repo are not what gets built here.
 > - Tuned and tested against the **DeceasedCraft (亡者世界)** modpack; that is the primary support target. Other packs are "best effort".
 > - Requires **ModernUI 3.12.0 for 1.20.1** — do not mix it with the 1.21.x ModernUI builds.
-> - Version numbering continues from upstream (`1.2.15.1` → `1.2.16`). A `1.2.16` from this fork only describes this backport branch and has no relation to any identically numbered upstream release.
+> - **Version numbering is independent of upstream** and restarted at `0.1.0`. A `0.1.x` / `0.x` release from this project corresponds to no upstream version at all; the last build that still carried an upstream number was `1.2.16`.
 
 ![Banner](
 https://cdn.modrinth.com/data/7Rnb6oJr/images/20ba5cbcaf71e2ab70436963776e5f801fea44a7.png)
@@ -65,8 +65,8 @@ https://cdn.modrinth.com/data/7Rnb6oJr/images/20ba5cbcaf71e2ab70436963776e5f801f
 - Currently specially supports to mute Reactive Music when MusicHUD is playing
 
 ## TO-DO List
-- Customizable HUD layout [target 1.3.0/1.4.0]
-- More music platform support (QQ Music, Kugou Music) [target 2.0.0]
+- Customizable HUD layout
+- More music platform support (QQ Music, Kugou Music)
 
 ## Usage
 
@@ -121,20 +121,20 @@ QQ Music support needs **its own** API server, which is a **separate Node.js pro
 ---
 ## CN version description
 
-> ## ⚠️ 请注意：这是移植分支，不是原版
+> ## ⚠️ 请注意：这是独立项目，不是原版
 >
-> **本仓库不是原作。** 它是 MusicHUD 的社区**低版本移植版**，把原 mod 移植回 **Minecraft 1.20.1（Forge + Fabric）**，并针对 **亡者世界（DeceasedCraft）** 整合包做了优化与适配。上游项目面向 1.21.x / NeoForge，由原作者维护。
+> **本仓库不是原作。** 它最初是 MusicHUD 的社区**低版本移植版**，把原 mod 移植回 **Minecraft 1.20.1（Forge + Fabric）**；现在已经**独立发展**，不再跟随上游，版本号也从 `0.1.0` 重新独立计数。上游项目面向 1.21.x / NeoForge，由原作者维护。
 >
 > - **原作者仓库：** https://github.com/Ephern/MusicHud — [Modrinth](https://modrinth.com/mod/music-hud) · [CurseForge](https://www.curseforge.com/minecraft/mc-mods/music-hud)
-> - **本移植仓库：** https://github.com/Qy14172945/MusicHud （分支 `1.20.1-forge`）
+> - **本项目仓库：** https://github.com/Qy14172945/MusicHud （分支 `1.20.1-forge`）
 >
-> 🚫 **本版本出现的任何 bug 都请不要到原作者处反馈。** 这里遇到的问题基本来自移植适配本身，与原作无关；请到[本仓库的 Issues](https://github.com/Qy14172945/MusicHud/issues) 反馈，并附上崩溃日志 / `latest.log`。
+> 🚫 **本版本出现的任何 bug 都请不要到原作者处反馈，也请不要向上游仓库提交 PR。** 本仓库现已是独立维护的代码库，上游仅作为出处说明；请到[本仓库的 Issues](https://github.com/Qy14172945/MusicHud/issues) 反馈，并附上崩溃日志 / `latest.log`。
 >
-> **本移植分支的定位**
+> **本项目的定位**
 > - **仅支持 Minecraft 1.20.1**（Forge 47.1.37 + Fabric 0.16.10），在 1.21.x 上无法运行；本仓库的 1.21.x 分支不参与本版本构建。
 > - 主要面向并针对 **亡者世界（DeceasedCraft）** 整合包调优与测试，其它整合包属于"尽力兼容"。
 > - 需要 **1.20.1 版的 ModernUI 3.12.0**，不要与 1.21.x 的 ModernUI 混用。
-> - 版本号沿用上游序列（`1.2.15.1` → `1.2.16`），但本移植版的 `1.2.16` 只代表本分支，与上游任何同号版本无关。
+> - **版本号独立计数**，从 `0.1.0` 重新开始，与上游版本序列没有任何对应关系；最后一个仍沿用上游编号的构建是 `1.2.16`。
 
 #### 图形化的全场景（单人/多人游戏）音乐模组/插件，设计上不修改任何游戏机制
 
@@ -176,8 +176,8 @@ QQ Music support needs **its own** API server, which is a **separate Node.js pro
 - 目前特殊支持在 MusicHUD 播放时静音 Reactive Music
 
 ## ~~大饼~~ 待办清单
-- 可自定义的 HUD 布局 [目标 1.3.0/1.4.0]
-- 更多音乐平台支持(QQ音乐, 酷狗音乐) [目标 2.0.0]
+- 可自定义的 HUD 布局
+- 更多音乐平台支持(QQ音乐, 酷狗音乐)
 
 ## 使用
 
@@ -206,7 +206,7 @@ QQ Music support needs **its own** API server, which is a **separate Node.js pro
 >
 > 由于一些限制，在游戏非正常退出时（如崩溃）无法自动结束进程
 
-##### 自动部署（客户端，1.2.15+）
+##### 自动部署（客户端）
 在设置页面中的 API 状态一栏中可找到“下载 API...”按钮，可打开一个下载指引，会从一个通过 GitHub Actions 自动发布 release 的[可信的分支仓库](https://github.com/MOPELotus/api-enhanced)下载 NetEase Cloud Music Enhanced 以绕过访问 GitHub Actions 工件的登录限制，可选使用 GH Proxy 加速下载
 
 ##### 手动部署

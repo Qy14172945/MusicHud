@@ -1,5 +1,5 @@
 # Builds both loader jars (Fabric + Forge) on every push and pull request to the
-# 1.20.1-forge branch.
+# 1.20.1-forge branch, and uploads them as a workflow artifact.
 #
 # Notes specific to this project:
 # - It must run on JDK 21. The build sets `options.release = 21` and the mod uses
@@ -9,6 +9,11 @@
 #   for the loaders, so the jar-producing tasks have to be named explicitly.
 # - Tests are disabled in common/build.gradle and call the live NetEase API, so
 #   they are not part of CI.
+#
+# There is deliberately no dependency-submission job: the Gradle one that GitHub's
+# template generates fails with "The Dependency graph is disabled for this
+# repository" here. Enable Settings -> Code security -> Dependency graph first, then
+# add `gradle/actions/dependency-submission` back.
 
 name: Build
 
@@ -25,16 +30,16 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: "21"
           distribution: "temurin"
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Build Fabric + Forge jars
         run: ./gradlew --no-daemon --console=plain :fabric:build :forge:build
@@ -45,7 +50,7 @@ jobs:
           MUSICHUD_FUZS_REPO: https://raw.githubusercontent.com/Fuzss/modresources/main/maven/
 
       - name: Upload jars
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: music_hud-1.20.1
           path: |
@@ -57,24 +62,3 @@ jobs:
             !forge/build/libs/*-sources.jar
           # Only the remapped jars are downloads; -dev-shadow and -sources are intermediates.
           if-no-files-found: error
-
-  dependency-submission:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      # Same reason as the build job: resolve Fuzs Mod Resources directly instead of via the
-      # ghproxy.net mirror that build.gradle falls back to for the author's network.
-      MUSICHUD_FUZS_REPO: https://raw.githubusercontent.com/Fuzss/modresources/main/maven/
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: "21"
-          distribution: "temurin"
-
-      - name: Generate and submit dependency graph
-        uses: gradle/actions/dependency-submission@v4

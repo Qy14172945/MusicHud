@@ -10,7 +10,10 @@ public record Version(long mayor, long minor, long patch, BuildType build) imple
     // follows the upstream MusicHud sequence. leastCapable is the protocol floor checked by
     // compatibleWith(...), so it has to move together with current - leaving it at the old
     // 1.2.2 would make this build refuse to talk to itself.
-    public static final Version current = new Version(0,1,0, BuildType.Stable);
+    public static final Version current = new Version(0,1,1, BuildType.Stable);
+    // Deliberately left at 0.1.0: this is a patch release, so a 0.1.1 client must still be able
+    // to talk to a 0.1.0 server (and vice versa). compatibleWith() only rejects versions below
+    // this floor, so raising it would break connections that still work.
     public static final Version leastCapable = new Version(0,1,0,BuildType.Stable);
 
     static {

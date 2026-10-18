@@ -24,6 +24,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.openal.AL10;
 import org.lwjgl.openal.AL;
+import org.lwjgl.openal.EXTEfx;
 import org.lwjgl.openal.SOFTDirectChannels;
 
 import java.io.BufferedInputStream;
@@ -177,6 +178,9 @@ public class StreamAudioPlayer {
             // 配置为非空间播放
             configureSourceForNonSpatialPlayback();
             checkALError("source configuration");
+            // Optional / best-effort parts, each drains its own errors, so they are
+            // deliberately kept out of the fatal check above.
+            applyOptionalSourceEnhancements();
             lastVolume = 1;
             lastSetGain = GAIN_UNSET;
 
@@ -515,13 +519,31 @@ public class StreamAudioPlayer {
      * Everything here is written from scratch on every call so it doubles as the
      * initial configuration and as the repair pass.
      */
+    /**
+     * Applies the mandatory state: a non-spatial source with no distance
+     * attenuation. These three properties are the only ones this player needs,
+     * and they are the only ones whose failure is fatal (see the caller's
+     * {@code checkALError("source configuration")}).
+     */
     private void configureSourceForNonSpatialPlayback() {
         AL10.alSourcei(source, AL10.AL_SOURCE_RELATIVE, AL10.AL_TRUE);
         AL10.alSource3f(source, AL10.AL_POSITION, 0, 0, 0);
         // No distance attenuation at all: this is a music stream, not a world sound.
         AL10.alSourcef(source, AL10.AL_ROLLOFF_FACTOR, 0);
+    }
+
+    /**
+     * Applies the optional enhancements and repairs. Everything here is best
+     * effort: OpenAL Soft rejects {@code AL_DIRECT_CHANNELS_SOFT} through the
+     * generic {@code alSourcei} entry point with {@code AL_INVALID_ENUM}, and it
+     * rejects <em>reading</em> {@code AL_DIRECT_FILTER} the same way, so each call
+     * is followed by an explicit drain. Without the drain the error would linger in
+     * the queue and the next error check would report a failure that never happened.
+     */
+    private void applyOptionalSourceEnhancements() {
         if (AL.getCapabilities().AL_SOFT_direct_channels) {
             AL10.alSourcei(source, SOFTDirectChannels.AL_DIRECT_CHANNELS_SOFT, AL10.AL_TRUE);
+            AL10.alGetError();
         }
         detachExternalFilters();
     }
@@ -535,12 +557,14 @@ public class StreamAudioPlayer {
         if (!AL.getCapabilities().ALC_EXT_EFX) {
             return;
         }
-        // AL_DIRECT_FILTER is not exposed by LWJGL's AL10, hence the raw constant.
-        // 0 means "no filter", which is the state this source must stay in.
-        final int alDirectFilter = 0x20005;
-        if (AL10.alGetSourcei(source, alDirectFilter) != 0) {
-            AL10.alSourcei(source, alDirectFilter, 0);
-        }
+        // Write-only on purpose. OpenAL Soft answers alGetSourcei(AL_DIRECT_FILTER)
+        // with AL_INVALID_ENUM ("Unexpected property: 0x20005" in its log), so
+        // probing the property would poison the error queue and make the very next
+        // checkALError() report a failure that never happened. Clearing is
+        // idempotent and legal whether or not a filter is currently attached.
+        AL10.alSourcei(source, EXTEfx.AL_DIRECT_FILTER, EXTEfx.AL_FILTER_NULL);
+        // Never let this repair pollute the error state of the caller.
+        AL10.alGetError();
     }
 
     /**
@@ -568,6 +592,7 @@ public class StreamAudioPlayer {
                 || AL10.alGetSourcef(source, AL10.AL_ROLLOFF_FACTOR) != 0f) {
             LOGGER.debug("Source spatial state drifted, restoring non-spatial configuration");
             configureSourceForNonSpatialPlayback();
+            applyOptionalSourceEnhancements();
             AL10.alGetError();
         } else {
             // 3. Even with intact spatial state, a filter may have been attached.

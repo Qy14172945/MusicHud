@@ -122,6 +122,7 @@
   "music_hud.config.common.soundVolume": "Sound volume for audio from Music HUD",
   "music_hud.config.common.soundVolumeInterval": "Sound volume interval for quick adjust",
   "music_hud.config.common.mainScreenAdditionalBackgroundDarken": "Additional background darken rate for main screen (0~1)",
+  "music_hud.config.common.mainScreenBlurBackground": "Blur the game scene behind the main screen (may flicker in multiplayer)",
   "music_hud.config.common.hudBackgroundMixAlpha": "HUD background theme color mix alpha (0~1)",
   "music_hud.config.category.layout": "HUD Layout",
   "music_hud.config.layout.verticalAlign": "Vertical align",

@@ -173,6 +173,21 @@ public interface ClientConfig {
 
     void setMainScreenAdditionalBackgroundDarken(double additionalBackgroundDarken);
 
+    /**
+     * Whether the main screen asks Modern UI to run its gaussian-blur post chain over the
+     * world behind it.
+     * <p>
+     * Defaults to {@code false}: when the world keeps rendering (multiplayer, or a
+     * single-player world opened to LAN) that post chain runs against a main render target
+     * that is still being drawn to, and the result is the whole background flickering and
+     * leaving stale cursor pixels every time the UI surface is re-recorded. Pausing
+     * single-player worlds happens to hide it because nothing redraws behind the screen.
+     * The dark background gradient is drawn either way, so only the blur itself is lost.
+     */
+    boolean getMainScreenBlurBackground();
+
+    void setMainScreenBlurBackground(boolean blurBackground);
+
     double getHudBackgroundMixAlpha();
 
     void setHudBackgroundMixAlpha(double hudBackgroundMixAlpha);

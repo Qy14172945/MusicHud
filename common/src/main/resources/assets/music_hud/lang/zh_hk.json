@@ -122,6 +122,7 @@
   "music_hud.config.common.soundVolume": "Music HUD 音量",
   "music_hud.config.common.soundVolumeInterval": "增減音量增量",
   "music_hud.config.common.mainScreenAdditionalBackgroundDarken": "主界面的額外背景變暗比例 (0~1)",
+  "music_hud.config.common.mainScreenBlurBackground": "主介面背景模糊（多人遊戲中可能閃爍）",
   "music_hud.config.common.hudBackgroundMixAlpha": "HUD 背景主題色混合半透明度 (0~1)",
   "music_hud.config.category.layout": "HUD 版面配置",
   "music_hud.config.layout.verticalAlign": "垂直對齊",

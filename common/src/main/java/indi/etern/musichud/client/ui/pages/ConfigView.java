@@ -177,6 +177,12 @@ public class ConfigView extends LinearLayout {
                     })
                     .setDefaultValue(0.5)
                     .create(commonCategory);
+            new PreferencesFragment.BooleanOption(
+                    context,
+                    I18n.get(MusicHud.MOD_ID + ".config.common.mainScreenBlurBackground"),
+                    clientConfig::getMainScreenBlurBackground,
+                    clientConfig::setMainScreenBlurBackground)
+                    .create(commonCategory);
             new PreferencesFragment.FloatOption(
                     context,
                     I18n.get(MusicHud.MOD_ID + ".config.common.hudBackgroundMixAlpha"),

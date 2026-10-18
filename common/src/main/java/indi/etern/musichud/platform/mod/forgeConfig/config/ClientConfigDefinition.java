@@ -52,6 +52,7 @@ public class ClientConfigDefinition implements ClientConfig {
     private final ForgeConfigSpec.ConfigValue<String> selectedApiProvider;
     private final ForgeConfigSpec.ConfigValue<Boolean> mergeSearchProviders;
     private final ForgeConfigSpec.ConfigValue<Double> mainScreenAdditionalBackgroundDarken;
+    private final ForgeConfigSpec.ConfigValue<Boolean> mainScreenBlurBackground;
     private final ForgeConfigSpec.ConfigValue<Double> hudBackgroundMixAlpha;
 
     private final ForgeConfigSpec.ConfigValue<String> hudVerticalPosition;
@@ -115,6 +116,12 @@ public class ClientConfigDefinition implements ClientConfig {
                 .comment("Main Screen Additional Background Darken Rate")
                 .translation(MusicHud.MOD_ID + ".config.common.mainScreenAdditionalBackgroundDarken")
                 .defineInRange("mainScreenAdditionalBackgroundDarken", 0.5, 0, 1);
+        mainScreenBlurBackground = builder
+                .comment("Blur the game scene behind the main screen (Modern UI effect)",
+                        "Works in single-player, but over a world that keeps rendering it makes the",
+                        "background flicker and leaves cursor ghosts, so it is off by default.")
+                .translation(MusicHud.MOD_ID + ".config.common.mainScreenBlurBackground")
+                .define("mainScreenBlurBackground", false);
         hudBackgroundMixAlpha = builder
                 .comment("Hud Background Mix Alpha")
                 .translation(MusicHud.MOD_ID + ".config.common.hudBackgroundMixAlpha")
@@ -542,6 +549,16 @@ public class ClientConfigDefinition implements ClientConfig {
     @Override
     public void setMainScreenAdditionalBackgroundDarken(double additionalBackgroundDarken) {
         mainScreenAdditionalBackgroundDarken.set(additionalBackgroundDarken);
+    }
+
+    @Override
+    public boolean getMainScreenBlurBackground() {
+        return mainScreenBlurBackground.get();
+    }
+
+    @Override
+    public void setMainScreenBlurBackground(boolean blurBackground) {
+        mainScreenBlurBackground.set(blurBackground);
     }
 
     @Override

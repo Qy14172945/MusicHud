@@ -25,6 +25,7 @@ package indi.etern.musichud.client.ui.screen;
 import icyllis.modernui.fragment.Fragment;
 import icyllis.modernui.graphics.Color;
 import icyllis.modernui.mc.*;
+import icyllis.modernui.view.KeyEvent;
 import indi.etern.musichud.interfaces.ClientConfig;
 import lombok.Getter;
 import lombok.NonNull;
@@ -66,7 +67,47 @@ public class MusicHudScreen extends Screen implements MuiScreen {
         mPrevious = previous;
         mFragment = Objects.requireNonNull(fragment);
         mCallback = callback != null ? callback :
-                fragment instanceof ScreenCallback cbk ? cbk : null;
+                fragment instanceof ScreenCallback cbk ? cbk : DefaultCallback.INSTANCE;
+    }
+
+    /**
+     * Stands in for the {@code null} callback this screen used to pass, so that the one hook
+     * this mod needs to override - {@link ScreenCallback#shouldBlurBackground()} - can reach
+     * Modern UI's {@code BlurHandler}.
+     * <p>
+     * Every other method reproduces what a {@code null} callback did, which is why overriding
+     * them is not optional: a {@code null} callback makes {@code UIManager} treat a
+     * non-menu screen as "Escape is the only back key" and makes this screen a pause screen,
+     * whereas the interface's own defaults would also accept the inventory key. Getting that
+     * wrong would turn E into "close the music screen".
+     */
+    private static final class DefaultCallback implements ScreenCallback {
+        static final DefaultCallback INSTANCE = new DefaultCallback();
+
+        @Override
+        public boolean isBackKey(int keyCode, @NonNull KeyEvent event) {
+            // Matches UIManager's null-callback branch for MuiScreens that are not menus.
+            return keyCode == KeyEvent.KEY_ESCAPE;
+        }
+
+        @Override
+        public boolean hasDefaultBackground() {
+            return true;
+        }
+
+        @Override
+        public boolean isPauseScreen() {
+            return true;
+        }
+
+        @Override
+        public boolean shouldBlurBackground() {
+            // Modern UI reads this from BlurHandler.blur(), which only runs on a screen change,
+            // so a toggle takes effect the next time the screen is opened. Reading the config
+            // live (instead of caching it in a field) at least avoids a stale value if the
+            // screen is reopened after the setting changed.
+            return ClientConfig.getInstance().getMainScreenBlurBackground();
+        }
     }
 
     /*@Override

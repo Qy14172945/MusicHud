@@ -45,6 +45,11 @@ import java.util.function.Consumer;
 public class StreamAudioPlayer {
     private static final int BUFFER_COUNT = 4;
     private static final int BUFFER_SIZE = 65536;
+    /**
+     * Sentinel for "not applied yet". Real gains are always in [0, 1], so a negative
+     * value can never collide with one.
+     */
+    private static final float GAIN_UNSET = -1f;
     private static final Logger LOGGER = MusicHud.getLogger(StreamAudioPlayer.class);
     private static final ClientConfig clientConfig = ClientConfig.getInstance();
     private static volatile StreamAudioPlayer instance = null;
@@ -56,6 +61,18 @@ public class StreamAudioPlayer {
     private final AtomicLong totalBufferedBytes = new AtomicLong(0);
     private volatile BlockingQueue<byte[]> audioBuffer = new LinkedBlockingQueue<>(30); // 最大30个数据块的缓冲区
     private int source = 0;
+    /**
+     * Last gain value this class successfully <em>wrote</em> to the OpenAL source.
+     * Kept separate from {@link #lastVolume} (the last <em>computed</em> target) so a
+     * gain that some other code overwrites behind our back can still be detected and
+     * corrected; see {@link #enforceSourceState()}.
+     */
+    private float lastSetGain = GAIN_UNSET;
+    /**
+     * Last gain <em>target</em> computed from the client config, used only to decide
+     * whether the config changed. The value actually written to OpenAL is tracked in
+     * {@link #lastSetGain}.
+     */
     private float lastVolume;
     private volatile CompletableFuture<?> playingFuture;
     private volatile CompletableFuture<?> downloadFuture;
@@ -158,14 +175,10 @@ public class StreamAudioPlayer {
             }
 
             // 配置为非空间播放
-            AL10.alSourcei(source, AL10.AL_SOURCE_RELATIVE, AL10.AL_TRUE);
-            AL10.alSource3f(source, AL10.AL_POSITION, 0, 0, 0);
-            AL10.alSourcef(source, AL10.AL_ROLLOFF_FACTOR, 0);
-            if (AL.getCapabilities().AL_SOFT_direct_channels) {
-                AL10.alSourcei(source, SOFTDirectChannels.AL_DIRECT_CHANNELS_SOFT, AL10.AL_TRUE);
-            }
+            configureSourceForNonSpatialPlayback();
             checkALError("source configuration");
             lastVolume = 1;
+            lastSetGain = GAIN_UNSET;
 
             initialized.set(true);
         } catch (Exception e) {
@@ -277,6 +290,7 @@ public class StreamAudioPlayer {
                         try {
                             synchronized (StreamAudioPlayer.class) {
                                 updateVolumeIfNecessary();
+                                enforceSourceState();
                                 if (!initialized.get() || source == 0) break;
 
                                 int processed = AL10.alGetSourcei(source, AL10.AL_BUFFERS_PROCESSED);
@@ -487,26 +501,109 @@ public class StreamAudioPlayer {
         }
     }
 
+    /**
+     * (Re-)applies the non-spatial playback configuration to {@link #source}.
+     * <p>
+     * The player owns a raw OpenAL source that is not registered with vanilla's
+     * {@code SoundEngine}, so any other mod (or vanilla itself) that enumerates
+     * sources or writes global/relative state can silently change our source
+     * behind our back. The observable symptom is the one this method exists to
+     * undo: the music suddenly gets much quieter - and, when an EFX low-pass
+     * filter has been attached, muffled as well - until the next track creates a
+     * brand new source and sounds normal again.
+     * <p>
+     * Everything here is written from scratch on every call so it doubles as the
+     * initial configuration and as the repair pass.
+     */
+    private void configureSourceForNonSpatialPlayback() {
+        AL10.alSourcei(source, AL10.AL_SOURCE_RELATIVE, AL10.AL_TRUE);
+        AL10.alSource3f(source, AL10.AL_POSITION, 0, 0, 0);
+        // No distance attenuation at all: this is a music stream, not a world sound.
+        AL10.alSourcef(source, AL10.AL_ROLLOFF_FACTOR, 0);
+        if (AL.getCapabilities().AL_SOFT_direct_channels) {
+            AL10.alSourcei(source, SOFTDirectChannels.AL_DIRECT_CHANNELS_SOFT, AL10.AL_TRUE);
+        }
+        detachExternalFilters();
+    }
+
+    /**
+     * Detaches any EFX direct filter that has been attached to {@link #source} by
+     * another mod. EFX is only touched when the context actually advertises it, so
+     * a context without the extension never even reads the property.
+     */
+    private void detachExternalFilters() {
+        if (!AL.getCapabilities().ALC_EXT_EFX) {
+            return;
+        }
+        // AL_DIRECT_FILTER is not exposed by LWJGL's AL10, hence the raw constant.
+        // 0 means "no filter", which is the state this source must stay in.
+        final int alDirectFilter = 0x20005;
+        if (AL10.alGetSourcei(source, alDirectFilter) != 0) {
+            AL10.alSourcei(source, alDirectFilter, 0);
+        }
+    }
+
+    /**
+     * Enforces the state that this player depends on for correct playback. Called
+     * from the main playback loop, i.e. many times per second, so every check is a
+     * cheap read followed by a write only when the read is wrong.
+     */
+    private void enforceSourceState() {
+        if (source == 0 || !AL10.alIsSource(source)) {
+            return;
+        }
+        // 1. The gain must be the value this class last wrote. Reading it back is the
+        //    only way to notice an external overwrite (vanilla writes AL_GAIN when a
+        //    SoundSource's volume changes, and third-party audio mods do the same).
+        if (lastSetGain >= 0) {
+            float actualGain = AL10.alGetSourcef(source, AL10.AL_GAIN);
+            if (Math.abs(actualGain - lastSetGain) > 1e-4f) {
+                LOGGER.debug("Source gain drifted from {} to {}, restoring", lastSetGain, actualGain);
+                AL10.alSourcef(source, AL10.AL_GAIN, lastSetGain);
+                AL10.alGetError(); // drain, this is a repair not an operation
+            }
+        }
+        // 2. Non-spatial flags must still be what configureSourceForNonSpatialPlayback set.
+        if (AL10.alGetSourcei(source, AL10.AL_SOURCE_RELATIVE) != AL10.AL_TRUE
+                || AL10.alGetSourcef(source, AL10.AL_ROLLOFF_FACTOR) != 0f) {
+            LOGGER.debug("Source spatial state drifted, restoring non-spatial configuration");
+            configureSourceForNonSpatialPlayback();
+            AL10.alGetError();
+        } else {
+            // 3. Even with intact spatial state, a filter may have been attached.
+            detachExternalFilters();
+        }
+        AL10.alGetError();
+    }
+
     private void updateVolumeIfNecessary() {
         float musicVolume = clientConfig.getMuted() ? 0 : (float) clientConfig.getSoundVolume() / 100 *
                                                           (clientConfig.getMixWithVanillaSoundVolume() ? Minecraft.getInstance().options.getSoundSourceVolume(SoundSource.MUSIC) : 1);
-        if (lastVolume != musicVolume && source != 0 && AL10.alIsSource(source)) {
-            PlayingStatusRenderer.getInstance().updateStatus(null);
-            AL10.alSourcef(source, AL10.AL_GAIN, musicVolume);
-            int error = AL10.alGetError();
-            if (error != AL10.AL_NO_ERROR) {
-                LOGGER.warn("Failed to set source gain to {}: {} (source: {})", musicVolume, getALErrorString(error), source);
-                // 可选：如果错误表明源无效，可以尝试重新创建源或标记为无效
-                if (error == AL10.AL_INVALID_NAME) {
-                    // 源可能已被删除，标记为无效，后续播放会重建
-                    LOGGER.error("Source {} is invalid, will be reinitialized on nextIdle play", source);
-                    source = 0; // 让下次播放时重新生成
-                    setStatus(Status.ERROR);
+        // Re-apply whenever the computed target changed OR whenever nothing has been
+        // written yet (lastSetGain < 0), e.g. right after a source was (re)created.
+        if (lastVolume != musicVolume || lastSetGain < 0) {
+            lastVolume = musicVolume;
+            if (source != 0 && AL10.alIsSource(source)) {
+                PlayingStatusRenderer.getInstance().updateStatus(null);
+                AL10.alSourcef(source, AL10.AL_GAIN, musicVolume);
+                int error = AL10.alGetError();
+                if (error != AL10.AL_NO_ERROR) {
+                    LOGGER.warn("Failed to set source gain to {}: {} (source: {})", musicVolume, getALErrorString(error), source);
+                    // Leave lastSetGain unset so the next loop iteration retries the write
+                    // instead of treating the stale gain as authoritative.
+                    lastSetGain = GAIN_UNSET;
+                    // 可选：如果错误表明源无效，可以尝试重新创建源或标记为无效
+                    if (error == AL10.AL_INVALID_NAME) {
+                        // 源可能已被删除，标记为无效，后续播放会重建
+                        LOGGER.error("Source {} is invalid, will be reinitialized on nextIdle play", source);
+                        source = 0; // 让下次播放时重新生成
+                        setStatus(Status.ERROR);
+                    } else {
+                        setStatus(Status.ERROR);
+                    }
                 } else {
-                    setStatus(Status.ERROR);
+                    lastSetGain = musicVolume;
                 }
-            } else {
-                lastVolume = musicVolume;
             }
         }
     }
@@ -568,6 +665,7 @@ public class StreamAudioPlayer {
         }
 
         lastVolume = 1;
+        lastSetGain = GAIN_UNSET;
         serverStartTime = null;
         cleanup();
     }
@@ -643,6 +741,7 @@ public class StreamAudioPlayer {
 
                 initialized.set(false);
                 lastVolume = 1;
+                lastSetGain = GAIN_UNSET;
                 audioBuffer = new LinkedBlockingQueue<>(30);
                 totalBufferedBytes.set(0);
                 playedBytes = 0;

@@ -456,6 +456,22 @@ public class MusicService {
         }
     }
 
+    /**
+     * Marks the start of a new connection: the next {@link #checkAndResetInitialSync()} call
+     * must clear whatever the previous server left behind.
+     * <p>
+     * {@code initialSyncReceived} used to be set once and never cleared, so only the very first
+     * connection of a process ever reset the local state. Every later one - which includes
+     * leaving a single-player world and joining a multiplayer server - skipped the reset and
+     * replayed the previous session's queue. Clearing it here (rather than in
+     * {@link #resetCurrentMusicStatus()}) is deliberate: this runs before the new connection's
+     * {@code SyncCurrentPlayingMessage} can arrive, so it cannot race with the sync it is
+     * meant to precede.
+     */
+    public synchronized void beginNewConnection() {
+        initialSyncReceived = false;
+    }
+
     @RegisterMark
     public static class RegisterImpl implements ClientRegister {
         @Override

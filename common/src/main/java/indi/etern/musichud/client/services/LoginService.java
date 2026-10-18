@@ -167,6 +167,11 @@ public class LoginService {
 
     public void connectToExternalServer() {
         if (clientConfig.getEnable()) {
+            // This is the one funnel through which every external connection starts (auto-connect on
+            // join, the toggle key bind, /reconnect). Marking the connection here is what makes the
+            // incoming sync re-initialise the local state instead of inheriting the previous
+            // session's - see MusicService#beginNewConnection.
+            MusicService.getInstance().beginNewConnection();
             clientNetworkService.sendToServer(new ConnectRequest(Version.current));
         }
     }

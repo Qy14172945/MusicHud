@@ -8,6 +8,7 @@ import indi.etern.musichud.beans.login.LoginCookieInfo;
 import indi.etern.musichud.beans.login.LoginType;
 import indi.etern.musichud.beans.music.*;
 import indi.etern.musichud.beans.user.Profile;
+import indi.etern.musichud.interfaces.IServerEventService;
 import indi.etern.musichud.interfaces.RegisterMark;
 import indi.etern.musichud.interfaces.ServerConfig;
 import indi.etern.musichud.interfaces.ServerRegister;
@@ -615,6 +616,17 @@ public class MusicPlayerServerService {
                     }
                 });
             }
+            // This service is a process-level singleton, but the integrated server it belongs to is
+            // not: leaving a single-player world and joining a multiplayer one creates a brand-new
+            // server while the old queue, current track and idle-play sources are still in memory.
+            // The next ConnectRequest then replays that stale state to whoever joins, which shows up
+            // as "the singleplayer playlist followed me onto the server". Dropping it on server stop
+            // keeps the lifetime of this state tied to the lifetime of the server that owns it.
+            IServerEventService.getInstance().registerServerLifecycleStopping(() -> {
+                if (instance != null) {
+                    instance.reset();
+                }
+            });
         }
     }
 

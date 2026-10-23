@@ -65,19 +65,40 @@ public class MusicHudMixinPlugin implements IMixinConfigPlugin {
      * every mod jar; the plugin's own loader is the fallback. A loader that cannot be queried at all
      * is reported as "not present" so an unreadable companion degrades to "feature off" rather than
      * to a hard mixin failure.
+     *
+     * <p><b>This must never load the probed class.</b> {@code shouldApplyMixin} runs during Mixin's
+     * <i>prepare</i> phase, while every config in the process is still being collected; a class that
+     * gets defined this early is defined <i>untransformed</i>, because the transformer is not ready
+     * yet. Any mixin that targets that class afterwards - ours, or another mod's - then silently
+     * never applies, and the damage only shows up much later as a {@code ClassCastException} or a
+     * missing interface, with nothing in the log pointing back here.
+     *
+     * <p>{@code Class.forName(name, false, loader)} is <b>not</b> safe for this: the {@code false}
+     * only skips static initialisation, it still defines and links the class. The concrete collision
+     * this can cause: Lost Beats applies an {@code @Accessor} mixin to BiomeBeats'
+     * {@code io.github.maki99999.biomebeats.music.MusicManager}; if that class is defined here
+     * before the accessor is applied, {@code SmartMusicManager.isWaiting()} throws
+     * {@code ClassCastException: MusicManager cannot be cast to MusicManagerAccessor} on every
+     * client tick. That is the failure shape seen in the field; the same hazard shows up in other
+     * mods' logs as
+     * {@code ModLauncher service does not currently support retrieval of untransformed bytecode}.
+     *
+     * <p>{@link ClassLoader#getResource(String)} answers the same question by looking up the
+     * {@code .class} file as a resource. It reads bytes, it never defines anything, so it cannot
+     * disturb anyone else's transformation.
      */
     private static boolean isClassPresent(String className) {
-        return tryLoad(className, Thread.currentThread().getContextClassLoader())
-                || tryLoad(className, MusicHudMixinPlugin.class.getClassLoader());
+        String resource = className.replace('.', '/') + ".class";
+        return hasResource(resource, Thread.currentThread().getContextClassLoader())
+                || hasResource(resource, MusicHudMixinPlugin.class.getClassLoader());
     }
 
-    private static boolean tryLoad(String className, ClassLoader classLoader) {
+    private static boolean hasResource(String resource, ClassLoader classLoader) {
         if (classLoader == null) {
             return false;
         }
         try {
-            Class.forName(className, false, classLoader);
-            return true;
+            return classLoader.getResource(resource) != null;
         } catch (Throwable e) {
             return false;
         }

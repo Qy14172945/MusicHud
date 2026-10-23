@@ -19,6 +19,9 @@ atlassian-ide-plugin.xml
 # Log file
 *.log
 
+# Crash reports dropped in the repository root for local debugging
+crash-*.txt
+
 # BlueJ files
 *.ctxt
 

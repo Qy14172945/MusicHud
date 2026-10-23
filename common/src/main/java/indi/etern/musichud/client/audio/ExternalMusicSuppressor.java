@@ -15,8 +15,10 @@ import java.lang.reflect.Method;
  * {@code SoundEngine}. No amount of SoundEngine hooking can silence them — the hook has to be in
  * the mod that owns the player.
  *
- * <p>So the two {@code BiomeBeats*} mixins cancel that mod's {@code play(...)} and its client tick,
- * and this class performs the "stop what is already sounding" half. It is deliberately a plain
+ * <p>So the two {@code BiomeBeats*} mixins cancel that mod's {@code play(...)} while MusicHud is
+ * active and hook the tail of its client tick, and this class performs the "stop what is already
+ * sounding" half. No part of that mod's tick is cancelled, so its conditional-music logic resumes on
+ * its own as soon as MusicHud stops. It is deliberately a plain
  * class holding the manager as {@link Object} and invoking {@code stop()} reflectively: MusicHud
  * must keep compiling and loading on servers and packs where BiomeBeats is not installed at all,
  * so it can never name that mod's types in its own code.

@@ -17,25 +17,35 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * {@code MusicManager.tick} leaves it audible, and why a pack can look like it "replaced the vanilla
  * music" with no obvious mod responsible.
  *
- * <p>Two hooks are needed and they are split across two classes on purpose:
- * <ul>
- *   <li><b>here</b> — cancelling {@code play(MusicTrack)} is what prevents <em>new</em> tracks from
- *       starting; the injection also records the manager instance so an already-sounding track can
- *       be stopped;</li>
- *   <li>{@link BiomeBeatsTickMixin} — cancels that mod's client tick and stops the current track,
- *       which silences a song that was already playing when the user requested one.</li>
- * </ul>
+ * <p><b>The block is conditional, so the mod is never disabled.</b> {@code play} is cancelled only
+ * while {@link VanillaMusicSuppressor#shouldSuppress()} is true — i.e. only while a MusicHud track is
+ * playing, buffering or retrying. The moment MusicHud stops, the next {@code play} call from
+ * BiomeBeats or Lost Beats runs untouched and the mod's own conditional-music logic takes over
+ * again. Nothing in its state machine is switched off, skipped or frozen from here.
  *
- * <p>{@code @Pseudo} marks the target as optional, and {@code MusicHudMixinPlugin} additionally
- * skips this mixin on packs without BiomeBeats, so MusicHud keeps loading everywhere. Lost Beats,
- * the popular BiomeBeats add-on, drives the same {@code MusicManager} through an extension
- * interface, so it is covered by the same hook.
+ * <p>Cancelling at {@code HEAD} rather than letting the track start and stopping it afterwards is
+ * deliberate: it is the only point where no audio has been submitted to the device yet, so there is
+ * nothing to hear and no decoder to tear down.
+ *
+ * <p>The other half of the suppression lives in {@link BiomeBeatsTickMixin}, which runs
+ * <em>after</em> BiomeBeats and Lost Beats have finished their own client tick and stops a track
+ * that was already sounding. The two hooks are split across two classes because they target two
+ * different classes of that mod.
+ *
+ * <p>{@code priority = 2000} places this above the default 1000, so it applies after the other
+ * mixins touching {@code MusicManager} — including Lost Beats' {@code MusicManagerMixin} and its
+ * {@code MusicManagerAccessor} — instead of racing them for the same method. {@code @Pseudo} marks
+ * the target as optional, and {@code MusicHudMixinPlugin} additionally skips this mixin on packs
+ * without BiomeBeats, so MusicHud keeps loading everywhere.
  */
 @Pseudo
-@Mixin(targets = "io.github.maki99999.biomebeats.music.MusicManager", remap = false)
+@Mixin(targets = "io.github.maki99999.biomebeats.music.MusicManager", priority = 2000, remap = false)
 public class BiomeBeatsMusicMixin {
     @Inject(method = "play", at = @At("HEAD"), cancellable = true, remap = false)
     private void music_hud$suppressBiomeBeatsTrack(CallbackInfo ci) {
+        // Keep the manager reference fresh across reloads and arm the "stop what is sounding" half
+        // in BiomeBeatsTickMixin. Doing it before the guard matters: a track started while MusicHud
+        // was idle still has to be stoppable once MusicHud takes over.
         ExternalMusicSuppressor.trackBiomeBeatsMusicManager(this);
         if (VanillaMusicSuppressor.shouldSuppress()) {
             ci.cancel();

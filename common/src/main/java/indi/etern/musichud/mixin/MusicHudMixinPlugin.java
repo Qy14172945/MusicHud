@@ -43,11 +43,17 @@ public class MusicHudMixinPlugin implements IMixinConfigPlugin {
         }
         if (mixinClassName.contains("BiomeBeats")) {
             // BiomeBeats is the mod that plays situational music through its own audio stack in
-            // most modpacks. Its two hooks are skipped entirely when it is absent, so MusicHud
-            // loads on every pack (the @Pseudo targets alone would be skipped too, but an explicit
-            // decision keeps the "required" mixin config from ever treating it as a failure).
+            // most modpacks. Its hooks are skipped entirely when it is absent, so MusicHud loads on
+            // every pack (the @Pseudo targets alone would be skipped too, but an explicit decision
+            // keeps the "required" mixin config from ever treating it as a failure).
+            //
+            // The statemachine.JavaStreamPlayer is the class every playback path of that mod
+            // funnels through, and it is what BiomeBeatsStreamPlayerMixin targets; require = 0 on
+            // those injections means a pack shipping a build without it degrades to "cannot
+            // suppress" instead of failing the launch.
             boolean present = isClassPresent("io.github.maki99999.biomebeats.BiomeBeatsCommon")
-                    && isClassPresent("io.github.maki99999.biomebeats.music.MusicManager");
+                    && isClassPresent("io.github.maki99999.biomebeats.music.MusicManager")
+                    && isClassPresent("io.github.maki99999.biomebeats.music.statemachine.JavaStreamPlayer");
             // Logged because "the game still plays its own music" is otherwise indistinguishable
             // from "the companion mod was not detected on this launcher's class loader".
             LOGGER.info("BiomeBeats music suppression: {}", present

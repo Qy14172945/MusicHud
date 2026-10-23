@@ -5,6 +5,43 @@ Version numbering is independent of upstream and restarted at `0.1.0`.
 
 ---
 
+## 0.1.3 — 2026-10-23
+
+### 修复：BiomeBeats / Lost Beats 的条件音乐仍能绕过抑制，MusicHud 播放时两首歌同时响
+
+**症状.** 装了 BiomeBeats 的整合包里，MusicHud 正在播放时，BiomeBeats 的环境/条件音乐依然会自己响起来，两路音乐同时出声。0.1.2 已经加了 BiomeBeats 的抑制钩子，但那版钩错了位置。
+
+**根因.** 0.1.2 的 `BiomeBeatsMusicMixin` 只在 `MusicManager.play(MusicTrack)` 上取消调用。但那个方法的调用者只有"外部点名要播某一首"的场景（配置界面预览、手动选歌）。真正让环境音乐自动播起来的是另一条路径：
+
+```
+MusicManager.playNext(boolean)          ← 条件变化时自己挑下一首
+  └─ offset 149: JavaStreamPlayer.play(MusicTrack)   ← 直接调，完全绕过 MusicManager.play
+       └─ JavaStreamPlayer.openPlay(MusicTrack)      ← 真正喂给 StreamPlayer 并起声的地方
+            └─ StreamPlayer.open(...).play()         ← JavaSound，从不经过 SoundEngine
+```
+
+`playNext` 是被 Lost Beats 的 `SmartMusicManager` 通过 `setCurrentMusicTracks(...)` 驱动的（`setCurrentMusicTracks` 在偏移 56 处调 `playNext`），也就是说**条件音乐自动切歌时，`MusicManager.play` 一次都不会被调用**，原有的 HEAD 取消点根本不会触发。
+
+**修复.** 新增 `BiomeBeatsStreamPlayerMixin`，把钩子下沉到 `io.github.maki99999.biomebeats.music.statemachine.JavaStreamPlayer` —— 这是该模组所有播放入口的唯一汇合点：`MusicManager.play`、`playNext`、状态机（`IdleState` / `FadeInState` / `MusicState` / `WaitingBreakState` / `PausedState`）以及 Lost Beats 的过渡系统最终都落在这里。
+
+```java
+@Pseudo
+@Mixin(targets = "io.github.maki99999.biomebeats.music.statemachine.JavaStreamPlayer",
+       priority = 2000, remap = false)
+public class BiomeBeatsStreamPlayerMixin {
+    @Inject(method = "play",     at = @At("HEAD"), cancellable = true, require = 0, remap = false)
+    @Inject(method = "openPlay", at = @At("HEAD"), cancellable = true, require = 0, remap = false)
+}
+```
+
+两个注入点都保留，理由不同：`play` 覆盖"点名要播某首"、`openPlay` 覆盖"状态机自己起声"。任一被未来版本改名时 `require = 0` 让它降级成"抑制失效"，而不是让整合包启动崩溃。
+
+**同时修掉的隐患.** `ExternalMusicSuppressor.stopExternalMusic()` 原先在 `biomeBeatsMusicManager == null` 时直接 return。而当首播走的是 `playNext`（而非 `play`）时，从未有人把 manager 实例传进来，导致"停掉正在响的那首"这一半静默失效。现在增加了 `resolveBiomeBeatsMusicManager()` 回退：读该模组的 `Constants.MUSIC_MANAGER` 公有静态字段，失败则一次性缓存 `biomeBeatsManagerResolveUnavailable` 不再重试。
+
+**行为保持不变.** 阻断仍然是**条件式**的：只有 `VanillaMusicSuppressor.shouldSuppress()`（即 MusicHud 正在播放/缓冲/重试）时才取消，MusicHud 一停，BiomeBeats 的下一次 `play`/`openPlay` 照常执行，条件音乐逻辑自行恢复，状态机没有被禁用或跳过。
+
+---
+
 ## 0.1.2 — 2026-10-23
 
 本版本文档只记录**修复**：三处问题都表现为"游戏启动后某个看似无关的位置报错"，根因却都在模组的 mixin 层，因此下面把机理写清楚，方便以后排查同类症状。

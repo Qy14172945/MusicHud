@@ -34,6 +34,11 @@ public final class ExternalMusicSuppressor {
     private static volatile Method biomeBeatsStop;
     private static volatile boolean biomeBeatsStopUnavailable;
     /**
+     * Set once the {@code Constants.MUSIC_MANAGER} fallback has failed, so a pack without that field
+     * is not re-probed on every tick.
+     */
+    private static volatile boolean biomeBeatsManagerResolveUnavailable;
+    /**
      * Set when that mod tries to start a track (or started one before MusicHud took over) and
      * cleared once it has been stopped. Without it the client tick would call {@code stop()} twenty
      * times a second on an already-silent player.
@@ -55,13 +60,64 @@ public final class ExternalMusicSuppressor {
     }
 
     /**
+     * Arms the next {@link #stopExternalMusic()} without touching the manager reference.
+     *
+     * <p>Used by the hooks on BiomeBeats' {@code JavaStreamPlayer}, which sits below
+     * {@code MusicManager} and therefore has no manager instance to hand over. It still has to arm
+     * the stop, because a track may already be sounding in the underlying stream player (queued by
+     * {@code playNext}, or started before MusicHud took over) even though the {@code play} call
+     * this hook just cancelled never completed.
+     */
+    public static void markBiomeBeatsStopPending() {
+        biomeBeatsStopPending = true;
+    }
+
+    /**
+     * Returns the BiomeBeats music manager, falling back to that mod's {@code Constants.MUSIC_MANAGER}
+     * singleton when we have not seen a {@code play} call yet.
+     *
+     * <p>The fallback matters for the JavaSound path: when BiomeBeats starts its very first track
+     * through {@code playNext} rather than {@code play}, nothing has ever handed us the manager
+     * instance, so the reflective {@code stop()} below would have nothing to invoke and the stop
+     * would be silently dropped while the track kept sounding.
+     *
+     * <p>Resolving a field of that mod's {@code Constants} class does load it, which is only safe
+     * outside mixin prepare — and this runs from a client tick, long after every mixin is applied.
+     * The lookup is attempted once and the outcome cached either way.
+     */
+    private static Object resolveBiomeBeatsMusicManager() {
+        Object known = biomeBeatsMusicManager;
+        if (known != null) {
+            return known;
+        }
+        if (biomeBeatsManagerResolveUnavailable) {
+            return null;
+        }
+        try {
+            ClassLoader loader = Thread.currentThread().getContextClassLoader();
+            Class<?> constants = Class.forName("io.github.maki99999.biomebeats.Constants", true, loader);
+            Object instance = constants.getField("MUSIC_MANAGER").get(null);
+            if (instance != null) {
+                biomeBeatsMusicManager = instance;
+            }
+            return instance;
+        } catch (Throwable e) {
+            biomeBeatsManagerResolveUnavailable = true;
+            return null;
+        }
+    }
+
+    /**
      * Stops whatever BiomeBeats is currently playing, once per started/attempted track. Safe to call
      * on any client tick and on any platform: it is a no-op when nothing was started since the last
      * call, and it never throws.
      */
     public static void stopExternalMusic() {
-        Object musicManager = biomeBeatsMusicManager;
-        if (musicManager == null || !biomeBeatsStopPending) {
+        if (!biomeBeatsStopPending) {
+            return;
+        }
+        Object musicManager = resolveBiomeBeatsMusicManager();
+        if (musicManager == null) {
             return;
         }
         biomeBeatsStopPending = false;

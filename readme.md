@@ -38,6 +38,14 @@ https://cdn.modrinth.com/data/7Rnb6oJr/images/20ba5cbcaf71e2ab70436963776e5f801f
 
 > Note: this backport only builds the **mod edition (Fabric + Forge)**. The plugin editions are not part of this branch and are not built from here.
 
+## Changelog / 更新日志
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each release, including the root cause of every fix.
+
+各版本的改动与修复原因见 [CHANGELOG.md](CHANGELOG.md)（中文，含根因说明）。
+
+Latest release: **0.1.2** — see [Releases](https://github.com/Qy14172945/MusicHud/releases).
+
 ## Prerequisites
 - **Minecraft 1.20.1** (this backport's only target)
 - ModernUI **3.12.0 for 1.20.1** (only client)
@@ -148,6 +156,12 @@ QQ Music support needs **its own** API server, which is a **separate Node.js pro
 [第三方 Bukkit 插件实现 2](https://github.com/MOPELotus/MusicHud-Paper) (1.1.4 hotfix +，目前已部分合并至主仓库)
 
 > 注意：本移植版只构建 **mod 版（Fabric + Forge）**，插件版不属于本分支，也不会在这里构建。
+
+## 更新日志
+
+各版本的改动与每项修复的根因见 [CHANGELOG.md](CHANGELOG.md)。
+
+最新版本：**0.1.2**，见 [Releases](https://github.com/Qy14172945/MusicHud/releases)。
 
 ## 前置依赖
 - **Minecraft 1.20.1**（本移植版唯一目标）

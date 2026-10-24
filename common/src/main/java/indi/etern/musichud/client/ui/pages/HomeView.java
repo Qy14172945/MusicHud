@@ -96,6 +96,69 @@ public class HomeView extends LinearLayout {
             }
         });
     };
+    // These three live on the instance rather than inside refresh() on purpose. refresh() runs on
+    // every reconnect and every config change, and the listener sets are add-only Sets keyed by
+    // identity: a fresh lambda per call would register a second, third, ... copy. Each copy then
+    // appends its own row on the next push (duplicate tracks, or rows that outlive the queue they
+    // describe), and only the last-registered one is ever removed on detach.
+    private final Consumer<MusicDetail> musicQueuePushListener = musicDetail ->
+            MuiModApi.postToUiThread(() -> {
+                if (playQueueListView == null) {
+                    return;
+                }
+                // The refresh callback that follows the push rebuilds the whole list and runs the
+                // visibility check against a snapshot, so this only needs to keep the tree in
+                // shape for the frame in between.
+                addMusicQueueItem(musicDetail, playQueueListView);
+            });
+    private final BiConsumer<Integer, MusicDetail> musicQueueRemoveListener = (removeIndex, musicDetail) ->
+            MuiModApi.postToUiThread(() -> removeMusicQueueItem(musicDetail, removeIndex));
+    private final Consumer<Queue<MusicDetail>> musicQueueRefreshListener = refreshedQueue ->
+            // The index-based add/remove callbacks above cannot express a reordering, and the
+            // reconcile can now rebuild a suffix (see MusicService#refreshQueue), so the whole
+            // list is rebuilt from the authoritative queue whenever a refresh arrives.
+            MuiModApi.postToUiThread(() -> rebuildMusicQueue(refreshedQueue));
+    // Detach must undo exactly what refresh() registered. Keeping the listener as a field instead
+    // of allocating a new one inside refresh() means repeated refresh() calls cannot stack copies,
+    // and the same instance can be handed back to removeOnAttachStateChangeListener.
+    private final OnAttachStateChangeListener attachStateListener = new OnAttachStateChangeListener() {
+        @Override
+        public void onViewAttachedToWindow(View v) {
+        }
+
+        @Override
+        public void onViewDetachedFromWindow(View v) {
+            detachListeners();
+            instance = null;
+        }
+    };
+
+    /**
+     * Unregisters every listener this view added, and forgets the views those listeners write to.
+     *
+     * <p>Both halves matter. Leaving the listeners registered means the next queue push keeps
+     * appending rows to a {@code playQueueListView} that {@link #refresh()} may have already
+     * removed from the tree with {@code removeAllViews()}; the rows then exist on a detached
+     * container nobody can see, which is why the list "sometimes shows and sometimes does not".
+     */
+    private void detachListeners() {
+        musicService.getLocalIdlePlaySourceAddListeners().remove(localAddListener);
+        musicService.getLocalIdlePlaySourceRemoveListeners().remove(localRemoveListener);
+        musicService.getServerIdlePlaySourceAddListeners().remove(serverAddListener);
+        musicService.getServerIdlePlaySourceRemoveListeners().remove(serverRemoveListener);
+        musicService.getMusicQueuePushListeners().remove(musicQueuePushListener);
+        musicService.getMusicQueueRemoveListeners().remove(musicQueueRemoveListener);
+        musicService.getMusicQueueRefreshListeners().remove(musicQueueRefreshListener);
+        playQueueListView = null;
+        queueTitle = null;
+        nextToPlayItem = null;
+        nextToPlayTitle = null;
+        clientIdlePlaySourceCardsList = null;
+        serverIdlePlaySourceCardsList = null;
+        clientIdlePlaySourceView = null;
+        serverIdlePlaySourceView = null;
+        staggeredLyricScrollView = null;
+    }
 
     public HomeView(Context context) {
         super(context);
@@ -105,6 +168,9 @@ public class HomeView extends LinearLayout {
     public void refresh() {
         instance = this;
         Context context = getContext();
+        // Drop the previous registration before rebuilding: the old child views are about to be
+        // discarded, so listeners that still point at them would only populate dead containers.
+        detachListeners();
         removeAllViews();
         idlePlaySourceCardMap.clear();
 
@@ -261,39 +327,14 @@ public class HomeView extends LinearLayout {
                 addMusicQueueItem(musicDetail, playQueueListView);
             }
 
-            Consumer<MusicDetail> musicQueuePushListener = musicDetail -> {
-                MuiModApi.postToUiThread(() -> {
-                    addMusicQueueItem(musicDetail, playQueueListView);
-                    checkQueue(queue);
-                });
-            };
-            BiConsumer<Integer, MusicDetail> musicQueueRemoveListener = (removeIndex, musicDetail) -> {
-                MuiModApi.postToUiThread(() -> {
-                    if (removeIndex >= 0 && removeIndex < playQueueListView.getChildCount()) {
-                        playQueueListView.removeViewAt(removeIndex);
-                    }
-                    checkQueue(queue);
-                });
-            };
+            // refresh() already unregistered everything via detachListeners(), so these are plain
+            // re-registrations. They are fields (not fresh lambdas) so that a later detach can
+            // remove exactly the instances that were added.
             musicService.getMusicQueuePushListeners().add(musicQueuePushListener);
             musicService.getMusicQueueRemoveListeners().add(musicQueueRemoveListener);
-
-            addOnAttachStateChangeListener(new OnAttachStateChangeListener() {
-                @Override
-                public void onViewAttachedToWindow(View v) {
-                }
-
-                @Override
-                public void onViewDetachedFromWindow(View v) {
-                    musicService.getLocalIdlePlaySourceAddListeners().remove(localAddListener);
-                    musicService.getLocalIdlePlaySourceRemoveListeners().remove(localRemoveListener);
-                    musicService.getServerIdlePlaySourceAddListeners().remove(serverAddListener);
-                    musicService.getServerIdlePlaySourceRemoveListeners().remove(serverRemoveListener);
-                    musicService.getMusicQueuePushListeners().remove(musicQueuePushListener);
-                    musicService.getMusicQueueRemoveListeners().remove(musicQueueRemoveListener);
-                    instance = null;
-                }
-            });
+            musicService.getMusicQueueRefreshListeners().add(musicQueueRefreshListener);
+            removeOnAttachStateChangeListener(attachStateListener);
+            addOnAttachStateChangeListener(attachStateListener);
         }
     }
 
@@ -392,6 +433,10 @@ public class HomeView extends LinearLayout {
     }
 
     private void checkQueue(Queue<MusicDetail> queue) {
+        // A posted listener can still run after the view was detached and the fields cleared.
+        if (queueTitle == null || playQueueListView == null) {
+            return;
+        }
         if (queue.isEmpty()) {
             queueTitle.setVisibility(View.GONE);
             playQueueListView.setVisibility(View.GONE);
@@ -403,7 +448,55 @@ public class HomeView extends LinearLayout {
         }
     }
 
+    /**
+     * Rebuilds the queue list from the authoritative queue.
+     *
+     * <p>Needed because the incremental callbacks cannot express a reordering, and because the
+     * reconcile in {@code MusicService#refreshQueue} may legitimately replace a suffix of the list.
+     * Rebuilding always yields a list that matches the server, which is what the player sees.
+     */
+    private void rebuildMusicQueue(Queue<MusicDetail> queue) {
+        if (playQueueListView == null) {
+            return;
+        }
+        playQueueListView.removeAllViews();
+        for (MusicDetail musicDetail : queue) {
+            addMusicQueueItem(musicDetail, playQueueListView);
+        }
+        checkQueue(queue);
+    }
+
+    /**
+     * Removes one queue row.
+     *
+     * <p>Matches by track rather than blindly trusting {@code removeIndex}: the remove callback is
+     * posted to the UI thread, so by the time it runs the list may already have been rebuilt, and
+     * an index applied to the new tree would delete the wrong row. The index is only a hint for
+     * which duplicate to drop when the same track was queued twice.
+     */
+    private void removeMusicQueueItem(MusicDetail musicDetail, int removeIndex) {
+        if (playQueueListView == null) {
+            return;
+        }
+        for (int i = 0; i < playQueueListView.getChildCount(); i++) {
+            View child = playQueueListView.getChildAt(i);
+            if (child instanceof MusicListItem item && item.getMusicDetail() != null
+                    && item.getMusicDetail().equals(musicDetail)) {
+                if (i == removeIndex || playQueueListView.getChildCount() == 1) {
+                    playQueueListView.removeViewAt(i);
+                    return;
+                }
+            }
+        }
+        if (removeIndex >= 0 && removeIndex < playQueueListView.getChildCount()) {
+            playQueueListView.removeViewAt(removeIndex);
+        }
+    }
+
     private void checkIdlePlaySources(Set<MusicCollection> idlePlaySources, View targetView) {
+        if (targetView == null) {
+            return;
+        }
         if (idlePlaySources.isEmpty()) {
             targetView.setVisibility(View.GONE);
         } else {
@@ -413,6 +506,10 @@ public class HomeView extends LinearLayout {
     }
 
     private void checkNextToPlay(MusicDetail nextIdle) {
+        // Same as checkQueue: this can be reached from a listener posted before detach.
+        if (nextToPlayTitle == null || nextToPlayItem == null) {
+            return;
+        }
         MusicService musicService = MusicService.getInstance();
         Queue<MusicDetail> musicQueue = musicService.getMusicQueue();
         boolean hasIdlePlaySources = !musicService.getLocalIdlePlaySources().isEmpty() || !musicService.getServerIdlePlaySources().isEmpty();

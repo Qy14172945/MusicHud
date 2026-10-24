@@ -36,7 +36,6 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -191,54 +190,65 @@ public class MusicService {
         clientNetworkService.sendToServer(new RemoveFromIdlePlaySourceMessage(idlePlaySource));
     }
 
+    /**
+     * Reconciles the local queue with the server's copy.
+     *
+     * <p>This used to walk an {@link Iterator} over {@code musicQueue} while that same deque was
+     * being mutated by {@code removeIf}. The deque's iterator is fail-fast on structural
+     * modification, but {@code removeIf} is not a structural modification it observes as such, so
+     * the cursor silently lost its place: after the first mismatch every comparison paired the
+     * wrong elements. Dropping two tracks from the head at once (a skip immediately followed by
+     * another skip) reconciled {@code [A, B, C]} against {@code [C]} into {@code [B]}. The list then
+     * disagreed with the server for the rest of the session, so entries stayed on screen after they
+     * had been skipped and a removal looked like it did nothing.
+     *
+     * <p>The reconcile is now done on an {@link ArrayList} snapshot and only then written back, so
+     * no iterator is ever held across a mutation. Removals are collected tail-first because the UI
+     * listeners below remove a child view by index: clearing the highest index first keeps every
+     * still-pending index valid, whereas going head-first would shift them all down by one.
+     */
     public synchronized void refreshQueue(Queue<MusicDetail> queue) {
-        Iterator<MusicDetail> originalIterator = musicQueue.iterator();
-        Iterator<MusicDetail> newIterator = queue.iterator();
-        int index = 0;
-        while (originalIterator.hasNext() || newIterator.hasNext()) {
-            if (originalIterator.hasNext() && newIterator.hasNext()) {
-                MusicDetail original = originalIterator.next();
-                MusicDetail news = newIterator.next();
-                if (original.getId() != news.getId()) {
-                    AtomicInteger atomicInt = new AtomicInteger(0);
-                    int finalIndex = index;
-                    musicQueue.removeIf((musicDetail) -> {
-                        int i = atomicInt.getAndIncrement();
-                        boolean remove = i == finalIndex && musicDetail.equals(original);
-                        if (remove) {
-                            musicQueueRemoveListeners.forEach(l -> {
-                                l.accept(i, musicDetail);
-                            });
-                        }
-                        return remove;
-                    });
-                }
-            } else if (newIterator.hasNext()) {
-                MusicDetail addedMusicDetail = newIterator.next();
-                musicQueue.add(addedMusicDetail);
-                musicQueuePushListeners.forEach(l -> {
-                    l.accept(addedMusicDetail);
-                });
-            } else {
-                AtomicInteger atomicInt = new AtomicInteger(0);
-                int finalIndex = index;
-                musicQueue.removeIf((removedMusicDetail) -> {
-                    int i = atomicInt.getAndIncrement();
-                    boolean remove = i >= finalIndex;
-                    if (remove) {
-                        musicQueueRemoveListeners.forEach(l -> {
-                            l.accept(i, removedMusicDetail);
-                        });
-                    }
-                    return remove;
-                });
-                break;
-            }
-            index++;
+        List<MusicDetail> incoming = new ArrayList<>(queue);
+        List<MusicDetail> working = new ArrayList<>(musicQueue);
+
+        // Everything that still matches the server by id at the same position is untouched. The
+        // server's order is authoritative, so rather than trying to match up a middle removal with
+        // a specific local element, the whole suffix after the common prefix is rebuilt. That costs
+        // a remove+push for tracks the server merely shifted, but it can never desynchronise.
+        int common = 0;
+        int maxCommon = Math.min(working.size(), incoming.size());
+        while (common < maxCommon && working.get(common).getId() == incoming.get(common).getId()) {
+            common++;
         }
-        musicQueueRefreshListeners.forEach(l -> {
-            l.accept(queue);
-        });
+
+        List<Integer> removedIndexes = new ArrayList<>();
+        List<MusicDetail> removedDetails = new ArrayList<>();
+        for (int i = working.size() - 1; i >= common; i--) {
+            removedIndexes.add(i);
+            removedDetails.add(working.remove(i));
+        }
+
+        List<MusicDetail> added = new ArrayList<>(incoming.subList(common, incoming.size()));
+        working.addAll(added);
+
+        musicQueue.clear();
+        musicQueue.addAll(working);
+
+        // Tail-first, because the UI listeners remove a child view by index: clearing the highest
+        // index first keeps every still-pending index valid, whereas going head-first would shift
+        // them all down by one.
+        for (int i = 0; i < removedIndexes.size(); i++) {
+            int removedIndex = removedIndexes.get(i);
+            MusicDetail removedDetail = removedDetails.get(i);
+            musicQueueRemoveListeners.forEach(l -> l.accept(removedIndex, removedDetail));
+        }
+        for (MusicDetail addedMusicDetail : added) {
+            musicQueuePushListeners.forEach(l -> l.accept(addedMusicDetail));
+        }
+        // A snapshot, not the live deque: the listeners post to the UI thread, and iterating the
+        // shared deque from there would race the server-driven next reconcile.
+        Queue<MusicDetail> snapshot = new ArrayDeque<>(musicQueue);
+        musicQueueRefreshListeners.forEach(l -> l.accept(snapshot));
     }
 
     public void sendPushMusicToQueue(MusicDetail musicDetail) {

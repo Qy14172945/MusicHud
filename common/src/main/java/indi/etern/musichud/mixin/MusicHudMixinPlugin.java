@@ -50,10 +50,13 @@ public class MusicHudMixinPlugin implements IMixinConfigPlugin {
             // The statemachine.JavaStreamPlayer is the class every playback path of that mod
             // funnels through, and it is what BiomeBeatsStreamPlayerMixin targets; require = 0 on
             // those injections means a pack shipping a build without it degrades to "cannot
-            // suppress" instead of failing the launch.
+            // suppress" instead of failing the launch. The bundled goxr3plus StreamPlayer is the
+            // innermost sink below it (the only place a SourceDataLine is started, which
+            // BiomeBeatsStreamDeviceMixin hooks), so it has to be probed too.
             boolean present = isClassPresent("io.github.maki99999.biomebeats.BiomeBeatsCommon")
                     && isClassPresent("io.github.maki99999.biomebeats.music.MusicManager")
-                    && isClassPresent("io.github.maki99999.biomebeats.music.statemachine.JavaStreamPlayer");
+                    && isClassPresent("io.github.maki99999.biomebeats.music.statemachine.JavaStreamPlayer")
+                    && isClassPresent("io.github.maki99999.biomebeats.com.goxr3plus.streamplayer.stream.StreamPlayer");
             // Logged because "the game still plays its own music" is otherwise indistinguishable
             // from "the companion mod was not detected on this launcher's class loader".
             LOGGER.info("BiomeBeats music suppression: {}", present

@@ -5,6 +5,96 @@ Version numbering is independent of upstream and restarted at `0.1.0`.
 
 ---
 
+## 0.1.4 — 2026-10-24
+
+### 修复：BiomeBeats / Lost Beats 的音乐又遮不住了（0.1.3 的相对回归）
+
+**症状.** 0.1.1 里能压住的 BiomeBeats（含 Lost Cities 等环境/条件音乐）在 0.1.2 / 0.1.3 里又能自己响起来，MusicHud 播放时两路音乐同时出声。
+
+**根因.** 0.1.3 的钩子全部挂在上层入口：`MusicManager.play(...)` 与 `JavaStreamPlayer.play(...)` / `openPlay(...)`。但播放器状态机里有一条**不经过这两个入口的起声路径**：
+
+```
+FadeInState.<init>(MusicTrack track)
+    if (!Objects.equals(track, ctx.getCurrentSong())) { ctx.stopAndResetGain(); ctx.openPlay(track); }
+    else                                        { ctx.getPlayer().resume(); }   // ← 绕过 openPlay
+```
+
+`ctx.getPlayer()` 是 biomebeats 内置的 goxr3plus `StreamPlayer`，而 `StreamPlayer.resume()` 是**该类仅有的两个会 `start()` 底层 `SourceDataLine` 的方法之一**（另一个是 `play()`）。换句话说：只要状态机认为"还是在放同一首、只是从淡出里恢复"，它就绕过了我们全部的钩子，直接让声卡继续出声。0.1.1 之所以"看起来能用"，是因为它的 `BiomeBeatsTickMixin` 在 `BiomeBeatsCommon.tick()` 的 `HEAD` 处整个 `ci.cancel()`，连带把这台状态机一起冻住了 —— 代价是条件音乐播完之后再也恢复不了（0.1.3 修的就是这个）。所以这是**用覆盖范围换来了正确性**留下的口子。
+
+**修复.** 新增 `BiomeBeatsStreamDeviceMixin`，直接挂在真正持有 `SourceDataLine` 的类上：
+
+```java
+@Pseudo @Mixin(targets = "io.github.maki99999.biomebeats.com.goxr3plus.streamplayer.stream.StreamPlayer",
+               priority = 2000, remap = false)
+public class BiomeBeatsStreamDeviceMixin {
+    @Inject(method = "play", at = @At("HEAD"), cancellable = true, require = 0, remap = false)
+    private void music_hud$suppressStreamPlayerPlay(CallbackInfo ci) {
+        if (VanillaMusicSuppressor.shouldSuppress()) {
+            ExternalMusicSuppressor.markBiomeBeatsStopPending();
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "resume", at = @At("HEAD"), cancellable = true, require = 0, remap = false)
+    private void music_hud$suppressStreamPlayerResume(CallbackInfoReturnable<Boolean> cir) {
+        if (VanillaMusicSuppressor.shouldSuppress()) {
+            ExternalMusicSuppressor.markBiomeBeatsStopPending();
+            cir.setReturnValue(false);
+        }
+    }
+}
+```
+
+`play()` 与 `resume()` 是该类**全部**的起声入口（`open(...)` 只准备流、`pause()` / `stop()` 只会停），所以钩在设备层再也没有调用方能绕过去 —— 这也是为什么它比在状态机各子类上逐个补钩更可靠。`resume()` 返回 `false` 与它原生"当前不在暂停态"的返回值语义一致，而唯一的调用方 `FadeInState` 会把返回值 `pop` 掉、不看它，因此不改变任何上层控制流。两个注入都用 `require = 0`：第三方 mod 若改了方法名，降级为"抑制失效"，而不是启动崩溃。
+
+`MusicHudMixinPlugin` 的存在性探测同步从 3 个类扩到 4 个（加入 `StreamPlayer`），仍用 `ClassLoader.getResource` 而不是 `Class.forName`。
+
+### 修复：播放列表有时显示、有时整块消失
+
+**症状.** 打开主界面，队列有时在、有时整块不见；重连服务器或改配置之后更容易复现。
+
+**根因（两个叠加）.**
+
+1. **监听器每刷新一次就多注册一份.** `HomeView.refresh()` 在每次重连、每次改配置时都会被 `MainFragment.refresh()` 调用，而它在方法体里 **new 了一批 lambda** 再注册进 `MusicService` 的监听器集合。这些集合是 `ConcurrentHashMap.newKeySet()` —— **按引用去重**，所以每次刷新都真的多出一份副本；旧副本从未被移除（只有最后注册的那份会在 detach 时被摘掉）。于是队列推送一次，就会往列表里 append 多行重复项。
+2. **提前 return 的分支把视图留在了死容器上.** `refresh()` 在"未连接且未开启 isolated 模式"时，`removeAllViews()` 之后就 `return`，但字段 `playQueueListView` 仍然指向那个**已经被移出视图树**的 `LinearLayout`。此后任何一次队列推送都会往这个不可见的容器里加行，`checkQueue` 也会把 `visibility` 设到不在树上的视图 —— 这就是"有时显示、有时不显示"。
+
+**修复.** 把监听器从方法体内的临时 lambda 提升为 **instance 字段**，并新增 `detachListeners()` 统一负责"反注册全部监听器 + 把引用视图的字段全部置 null"：
+
+- `refresh()` 一进来先 `detachListeners()`，再 `removeAllViews()`，然后才重建并重新注册 —— 重复刷新不再堆积副本。
+- `detachListeners()` 同时清空 `playQueueListView` / `queueTitle` / `nextToPlayItem` / `nextToPlayTitle` / 四个 idle-play-source 视图字段 / `staggeredLyricScrollView`，让后续任何迟到的回调都拿不到已经死掉的容器。
+- `checkQueue` / `checkNextToPlay` / `checkIdlePlaySources` 全部补上 null 守卫 —— 因为它们会被 `MuiModApi.postToUiThread(...)` 调度，可能在 detach 之后才执行。
+- `attachStateListener` 也提升为字段，注册前先 `removeOnAttachStateChangeListener(...)`，保证 detach 回调不会重复累积。
+
+### 修复：队列已经切歌了，播放列表还显示旧歌；点"移除"没反应
+
+**根因（两个独立缺陷）.**
+
+1. **`MusicService.refreshQueue` 的增量算法在"一次移除多个头部元素"时算错.** 原实现在 `ArrayDeque` 上**持着迭代器的同时**用 `removeIf` 修改同一个 deque。`ArrayDeque.removeIf` 不会抛 `ConcurrentModificationException`（它走的是自身的批量删除），但迭代器游标会**静默错位**。用一份忠实复刻的脚本实测：
+
+   ```
+   [A,B,C] 与 [C] reconcile（连续两次跳过）  期望 [C]，实际得到 [B]   ← WRONG
+   [A,B,C] 与 [B,C]（跳过一首）              得到 [B,C]            ← OK
+   ```
+
+   一旦算错，列表与服务端**整局**都对不上，后续所有增量都在错误基线上叠加。
+
+2. **"整表重建"根本没有触发点.** `MusicService` 提供了 `musicQueueRefreshListeners`（每次 reconcile 后用权威队列回调一次），但**全项目零消费者** —— 没有任何 UI 注册它。因此当增量回调不足以表达真实变化（重新排序、后缀整体替换）时，UI 没有任何纠错机会。
+
+**修复.**
+
+- `refreshQueue` 改为**公共前缀 + 后缀整体重建**：先逐位比较求出与服务端队列的公共前缀长度，再从尾向前把本地多出来的元素逐个移除（同时记下 `removedIndexes`，**尾先收集**，这样 UI 按索引删除时不会发生索引偏移），最后把服务端新增的后缀整体追加。
+- 派发 refresh 时使用**快照**（`new ArrayDeque<>(musicQueue)`）而不是直接遍历共享 deque —— 监听器会 `postToUiThread`，异步执行时队列可能已被下一次 reconcile 改动。
+- `HomeView` 注册 `musicQueueRefreshListeners`，收到就 `rebuildMusicQueue(...)`：`removeAllViews()` + 逐项重建 + `checkQueue(...)`。从此列表有权威重建路径，增量错了也能在下一帧自愈。
+- "移除"改成**按曲目定位**而不是盲信 `removeIndex`：`removeMusicQueueItem(musicDetail, removeIndex)` 先遍历 `MusicListItem.getMusicDetail()` 找同曲项删除，索引只作为"同一首入队两次时删哪一个"的提示，找不到匹配才回退按索引删。原因同样是那条回调走 `postToUiThread`，等它执行时列表可能已经被整表重建过，旧索引会删错行。
+
+### 兼容性
+
+`leastCapable` 保持 `0.1.0` 不变 —— 这是补丁版本，0.1.4 客户端仍需能连 0.1.0 服务端（反之亦然）。`compatibleWith()` 只拒绝低于该下限的版本，抬高它会让本来能用的连接失效。
+
+新增的 4 个 BiomeBeats 相关 mixin 全部 `require = 0` + `@Pseudo`，缺少目标 mod 时直接跳过，不影响纯原版或其他整合包。
+
+---
+
 ## 0.1.3 — 2026-10-23
 
 ### 修复：BiomeBeats / Lost Beats 的条件音乐仍能绕过抑制，MusicHud 播放时两首歌同时响

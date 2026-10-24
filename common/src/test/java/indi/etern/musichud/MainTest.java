@@ -64,9 +64,10 @@ public class MainTest {
         // compatible.
         assert Version.compatibleWith(new Version(0, 1, 0, Version.BuildType.Alpha));
         assert Version.compatibleWith(new Version(0, 1, 0, Version.BuildType.Stable));
-        // 0.1.3 is a patch release and did not raise leastCapable, so a 0.1.0 peer stays usable.
+        // 0.1.4 is a patch release and did not raise leastCapable, so a 0.1.0 peer stays usable.
         assert Version.compatibleWith(new Version(0, 1, 1, Version.BuildType.Stable));
         assert Version.compatibleWith(new Version(0, 1, 2, Version.BuildType.Stable));
+        assert Version.compatibleWith(new Version(0, 1, 3, Version.BuildType.Stable));
         assert Version.compatibleWith(Version.current);
         assert Version.compatibleWith(new Version(1, 2, 16, Version.BuildType.Stable));
         assert !Version.compatibleWith(new Version(0, 0, 9, Version.BuildType.Stable));
